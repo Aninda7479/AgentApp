@@ -1,15 +1,25 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as THREE from 'three';
 import { Lily } from '../models/lily/index';
 
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
 describe('Lily 3D model (anime girl)', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let loadSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    loadSpy = vi.spyOn(GLTFLoader.prototype, 'load').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+    loadSpy.mockRestore();
+  });
+
   const make = () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      return new Lily('#ff8fb3');
-    } finally {
-      errorSpy.mockRestore();
-    }
+    return new Lily('#ff8fb3');
   };
 
   it('builds with the required joint hierarchy intact', () => {

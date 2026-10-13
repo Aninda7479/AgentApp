@@ -305,3 +305,28 @@ Cargo matches test names using substring filters:
   ```bash
   npx vitest packages/ui/src/renderer/components/focus-ring.test.ts
   ```
+
+---
+
+## 9. AI Agent Context Management & Subagent Workflow
+
+To eliminate context rot, prevent memory loss across long sessions, and minimize prompting overhead when working with AI agents in this repository:
+
+### A. Living Project Map
+Always consult [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md) before initiating changes. It defines exact domain ownership, inter-package dependencies, and package-specific verification targets.
+
+### B. Strict Targeted Verification (Fast Iteration Loop)
+Do **not** run the entire monorepo test suite (`npm test`) on minor incremental changes. Strictly verify against the target package being modified:
+- **Core Engine changes**: `cargo check -p superagent-core-v2`
+- **CLI changes**: `cargo check -p superagent-cli`
+- **Desktop host changes**: `cargo check -p superagent-desktop-app`
+- **UI changes**: `npm run build:tsc --workspace=@superagent/ui`
+- **Extension changes**: `npx tsc -p packages/browser-extension/tsconfig.json --noEmit`
+
+### C. Subagent Task Delegation
+For large or multi-package features, do not attempt to hold all crate details in a single chat context. Decompose the task and delegate:
+1. **Core Specialist Subagent**: Implements backend Rust data structures, storage, and WebSocket RPC in `packages/core_v2`.
+2. **UI Specialist Subagent**: Implements frontend React components and state stores in `packages/ui`.
+3. **Host / Shell Subagent**: Handles native desktop wrappers in `packages/desktop` or native overlays.
+Each subagent executes in a fresh, unpolluted context window and reports concise verification results back to the primary session.
+

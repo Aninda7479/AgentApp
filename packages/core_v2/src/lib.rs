@@ -11,6 +11,7 @@ pub mod roster;
 pub mod server;
 pub mod startup;
 pub mod storage;
+pub mod threed_workspace;
 pub mod tools;
 pub mod types;
 pub mod video_workspace;

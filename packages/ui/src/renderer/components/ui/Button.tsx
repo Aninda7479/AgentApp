@@ -5,13 +5,13 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: 'sm' | 'md' | 'lg';
 }
 
-export const Button: React.FC<ButtonProps> = ({
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   variant = 'secondary',
   size = 'md',
   className = '',
   children,
   ...props
-}) => {
+}, ref) => {
   const baseStyle = 'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium cursor-pointer transition-all select-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]';
   
   const variants = {
@@ -30,10 +30,13 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
+      ref={ref}
       className={`${baseStyle} ${variants[variant]} ${sizes[size]} ${className}`}
       {...props}
     >
       {children}
     </button>
   );
-};
+});
+
+Button.displayName = 'Button';

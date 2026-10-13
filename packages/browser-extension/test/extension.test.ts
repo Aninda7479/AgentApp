@@ -105,13 +105,26 @@ describe('SuperAgent Browser Extension Test Suite', () => {
   });
 
   describe('Tool Relay', () => {
-    it('should handle unconfigured tab gracefully', async () => {
-      // In non-browser Node/Vitest env where chrome.tabs query returns empty
+    it('returns structured error when no active browser tab exists', async () => {
       const res = await ToolRelay.execute({
         tool: 'extract_page_content',
-        input: {}
+        input: {},
       });
-      expect(res).toBeDefined();
+      expect(res).toEqual({
+        success: false,
+        error: 'No active browser tab found to execute tool',
+      });
+    });
+
+    it('rejects unsupported tool names gracefully', async () => {
+      // Pass a non-existent tabId to verify tab lookup or missing tab error
+      const res = await ToolRelay.execute({
+        tool: 'unsupported_tool' as any,
+        input: {},
+        tabId: 999999,
+      });
+      expect(res.success).toBe(false);
+      expect(typeof res.error).toBe('string');
     });
   });
 });

@@ -2,35 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 
-class WindowManager {
-  private windows: Map<string, any> = new Map();
-  private mainWindow: any = null;
-  createMainWindow() {
-    const win = { id: 'main', name: 'main', isDestroyed: () => false, focus: vi.fn(), close: () => this.closeWindow('main') };
-    this.mainWindow = win;
-    this.windows.set('main', win);
-    return win;
-  }
-  getMainWindow() { return this.mainWindow; }
-  getAllWindows() { return Array.from(this.windows.values()); }
-  createWindow(name: string, _opts?: any) {
-    if (this.windows.has(name)) {
-      return this.windows.get(name);
-    }
-    const win = { id: name, name, isDestroyed: () => false, focus: vi.fn(), close: () => this.closeWindow(name) };
-    this.windows.set(name, win);
-    return win;
-  }
-  getWindowByName(name: string) { return this.windows.get(name); }
-  closeWindow(id: string) {
-    if (this.mainWindow?.id === id) this.mainWindow = null;
-    this.windows.delete(id);
-  }
-  closeAllWindows() {
-    this.windows.clear();
-    this.mainWindow = null;
-  }
-}
+import { toTauriCommand, TAURI_COMMAND_MAP } from '../src/renderer/lib/ipc';
 import { Sidebar } from '../src/renderer/pages/Workspace/Sidebar';
 import { TrajectoryCanvas, TrajectoryStep } from '../src/renderer/pages/Workspace/TrajectoryCanvas';
 import { Composer } from '../src/renderer/pages/Workspace/Composer';
@@ -44,45 +16,26 @@ import { IntegrationsSettings } from '../src/renderer/pages/Settings/Integration
 import { McpInstallModal } from '../src/renderer/pages/Settings/McpInstallModal';
 import { App } from '../src/renderer/App';
 
-describe('Step 081: Desktop Multi-Window Manager & UI Components', () => {
-  let wm: WindowManager;
-
-  beforeEach(() => {
-    wm = new WindowManager();
+describe('Desktop Tauri Native Window Actions & Command Mapping', () => {
+  it('maps desktop window actions to native Tauri commands', () => {
+    expect(toTauriCommand('window-minimize')).toBe('minimize_window');
+    expect(toTauriCommand('window-maximize')).toBe('toggle_window_maximize');
+    expect(toTauriCommand('window-close')).toBe('close_window');
   });
 
-  it('should create and manage main window', () => {
-    const win = wm.createMainWindow();
-    expect(win).toBeDefined();
-    expect(wm.getMainWindow()).toBe(win);
-    expect(wm.getAllWindows()).toHaveLength(1);
+  it('preserves native screenshot and system info commands', () => {
+    expect(toTauriCommand('system-info')).toBe('get_system_info');
+    expect(toTauriCommand('app-version')).toBe('get_app_version');
+    expect(toTauriCommand('autostart-status')).toBe('autostart_is_enabled');
+    expect(toTauriCommand('screenshot-screen')).toBe('circle_search_get_screen_image');
   });
 
-  it('should create named windows and handle window closure', () => {
-    const settingsWin = wm.createWindow('settings', { width: 600, height: 400 });
-    expect(wm.getWindowByName('settings')).toBe(settingsWin);
-    expect(wm.getAllWindows()).toHaveLength(1);
-
-    wm.closeWindow(settingsWin.id);
-    expect(wm.getWindowByName('settings')).toBeUndefined();
-    expect(wm.getAllWindows()).toHaveLength(0);
-  });
-
-  it('should restore/focus existing window when recreating with same name', () => {
-    const win1 = wm.createWindow('preview');
-    const win2 = wm.createWindow('preview');
-    expect(win1.id).toBe(win2.id);
-  });
-
-  it('should close all windows on closeAllWindows', () => {
-    wm.createMainWindow();
-    wm.createWindow('aux1');
-    wm.createWindow('aux2');
-    expect(wm.getAllWindows()).toHaveLength(3);
-
-    wm.closeAllWindows();
-    expect(wm.getAllWindows()).toHaveLength(0);
-    expect(wm.getMainWindow()).toBeNull();
+  it('contains valid command mappings for all registered actions', () => {
+    for (const [action, command] of Object.entries(TAURI_COMMAND_MAP)) {
+      expect(typeof action).toBe('string');
+      expect(typeof command).toBe('string');
+      expect(command.length).toBeGreaterThan(0);
+    }
   });
 });
 

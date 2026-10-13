@@ -96,4 +96,36 @@ mod tests {
         lock.heartbeat = now - 100_000; // 100s old -> stale
         assert!(!is_lock_alive(&lock));
     }
+
+    #[test]
+    fn test_concurrent_lock_read_write() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("test_lock_race_{}", uuid::Uuid::new_v4()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let lock_path = temp_dir.join("web-server.lock");
+
+        let mut handles = Vec::new();
+        for i in 0..20 {
+            let p = lock_path.clone();
+            handles.push(std::thread::spawn(move || {
+                let lock = WebServerLock {
+                    pid: 1000 + i,
+                    port: 1469,
+                    host: "127.0.0.1".to_string(),
+                    started_by: "test_runner".to_string(),
+                    started_at: 1000,
+                    heartbeat: 1000 + (i as u64 * 10),
+                };
+                let json = serde_json::to_string(&lock).unwrap();
+                let _ = fs::write(&p, json);
+                let _ = fs::read_to_string(&p);
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

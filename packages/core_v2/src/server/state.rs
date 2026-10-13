@@ -64,6 +64,7 @@ pub struct AppState {
         Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>>,
     pub image_workspace: Arc<crate::image_workspace::ImageWorkspaceManager>,
     pub video_workspace: Arc<crate::video_workspace::VideoWorkspaceManager>,
+    pub threed_workspace: Arc<crate::threed_workspace::ThreeDWorkspaceManager>,
     pub telegram_bot: Arc<crate::integrations::TelegramBotManager>,
 }
 

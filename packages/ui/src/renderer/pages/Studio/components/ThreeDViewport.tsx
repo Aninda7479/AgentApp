@@ -1,209 +1,198 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import {
   Grid,
   Compass,
-  ChevronDown,
   Download,
-  ThumbsUp,
-  ThumbsDown,
   Share2,
   Layers,
   Box,
-  Bone
+  Maximize2,
+  RotateCcw,
+  Camera,
+  Footprints,
+  Eye,
+  Sun,
+  ShieldAlert,
 } from 'lucide-react';
-import { TransformState, GeneratedModel } from './types';
+import {
+  CameraMode,
+  EnvironmentPreset,
+  MeshStats,
+  SceneNodeInfo,
+  ShadingMode,
+  TransformState,
+} from './types';
 
-interface ThreeDViewportProps {
-  activeStage: number;
+export interface ThreeDViewportProps {
+  modelUrl: string | null;
+  modelFormat?: string;
+  cameraMode: CameraMode;
+  onCameraModeChange: (mode: CameraMode) => void;
+  shadingMode: ShadingMode;
+  onShadingModeChange: (mode: ShadingMode) => void;
+  environmentPreset: EnvironmentPreset;
+  onEnvironmentPresetChange: (preset: EnvironmentPreset) => void;
   showGrid: boolean;
   onShowGridChange: (val: boolean) => void;
+  showShadows: boolean;
+  onShowShadowsChange: (val: boolean) => void;
   autoRotate: boolean;
   onAutoRotateChange: (val: boolean) => void;
-  shadingMode: 'clay' | 'flat' | 'textured';
-  onShadingModeChange: (mode: 'clay' | 'flat' | 'textured') => void;
-  conceptImage: string | null;
-  stylization: string;
-  result: GeneratedModel | null;
-  visibleNodes: Record<string, boolean>;
   modelPosition: TransformState;
   modelRotation: TransformState;
   modelScale: TransformState;
-  materialColor: string;
-  materialRoughness: number;
-  materialMetalness: number;
-  animationPreset: 'idle' | 'walk' | 'wave' | 'dance';
-  animationSpeed: number;
-  isAnimating: boolean;
-  triggerToast: (msg: string, type?: 'info' | 'error') => void;
+  onStatsLoaded?: (stats: MeshStats) => void;
+  onSceneHierarchyLoaded?: (nodes: SceneNodeInfo[]) => void;
+  triggerToast?: (msg: string, type?: 'info' | 'error') => void;
 }
 
 export const ThreeDViewport: React.FC<ThreeDViewportProps> = ({
-  activeStage,
-  showGrid,
-  onShowGridChange,
-  autoRotate,
-  onAutoRotateChange,
+  modelUrl,
+  modelFormat = 'glb',
+  cameraMode,
+  onCameraModeChange,
   shadingMode,
   onShadingModeChange,
-  conceptImage,
-  stylization,
-  result,
-  visibleNodes,
+  environmentPreset,
+  onEnvironmentPresetChange,
+  showGrid,
+  onShowGridChange,
+  showShadows,
+  onShowShadowsChange,
+  autoRotate,
+  onAutoRotateChange,
   modelPosition,
   modelRotation,
   modelScale,
-  materialColor,
-  materialRoughness,
-  materialMetalness,
-  animationPreset,
-  animationSpeed,
-  isAnimating,
-  triggerToast
+  onStatsLoaded,
+  onSceneHierarchyLoaded,
+  triggerToast,
 }) => {
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const gridHelperRef = useRef<THREE.GridHelper | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const controlsInteractingRef = useRef<boolean>(false);
-
-  // Model references for animation
+  const gridHelperRef = useRef<THREE.GridHelper | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
-  const skeletonGroupRef = useRef<THREE.Group | null>(null);
-  const leftArmJointRef = useRef<THREE.Group | null>(null);
-  const rightArmJointRef = useRef<THREE.Group | null>(null);
-  const leftLegJointRef = useRef<THREE.Group | null>(null);
-  const rightLegJointRef = useRef<THREE.Group | null>(null);
-  const chestJointRef = useRef<THREE.Group | null>(null);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const dirLightRef = useRef<THREE.DirectionalLight | null>(null);
 
-  // View snapping coordinates
-  const snapToView = (direction: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'reset') => {
-    if (!cameraRef.current || !controlsRef.current) return;
-    const distance = 4.5;
-    controlsRef.current.target.set(0, 0, 0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-    switch (direction) {
-      case 'front':
-        cameraRef.current.position.set(0, 0, distance);
-        break;
-      case 'back':
-        cameraRef.current.position.set(0, 0, -distance);
-        break;
-      case 'left':
-        cameraRef.current.position.set(-distance, 0, 0);
-        break;
-      case 'right':
-        cameraRef.current.position.set(distance, 0, 0);
-        break;
-      case 'top':
-        cameraRef.current.position.set(0, distance, 0.001);
-        break;
-      case 'bottom':
-        cameraRef.current.position.set(0, -distance, 0.001);
-        break;
-      case 'reset':
-      default:
-        cameraRef.current.position.set(0, 0.5, distance);
-        controlsRef.current.target.set(0, 0.2, 0);
-        break;
-    }
-    controlsRef.current.update();
-    triggerToast(`View aligned to ${direction}.`);
-  };
+  // Walkthrough keyboard movement state
+  const keysPressed = useRef<Record<string, boolean>>({});
 
-  // Keyboard snapping listener
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-        return;
-      }
-      
-      switch (e.key) {
-        case '1':
-          snapToView('front');
+  // ── Snap to Orthographic Angle Views ──
+  const snapToView = useCallback(
+    (view: 'front' | 'back' | 'left' | 'right' | 'top' | 'isometric' | 'reset') => {
+      if (!cameraRef.current || !controlsRef.current) return;
+      const distance = 6.0;
+      controlsRef.current.target.set(0, 1.0, 0);
+
+      switch (view) {
+        case 'front':
+          cameraRef.current.position.set(0, 1.0, distance);
           break;
-        case '3':
-          snapToView('right');
+        case 'back':
+          cameraRef.current.position.set(0, 1.0, -distance);
           break;
-        case '7':
-          snapToView('top');
+        case 'left':
+          cameraRef.current.position.set(-distance, 1.0, 0);
           break;
-        case '0':
-          snapToView('reset');
+        case 'right':
+          cameraRef.current.position.set(distance, 1.0, 0);
+          break;
+        case 'top':
+          cameraRef.current.position.set(0, distance + 1.0, 0.001);
+          break;
+        case 'isometric':
+          cameraRef.current.position.set(distance * 0.7, distance * 0.7, distance * 0.7);
+          break;
+        case 'reset':
+        default:
+          cameraRef.current.position.set(3.5, 3.0, 5.0);
+          controlsRef.current.target.set(0, 1.0, 0);
           break;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+      controlsRef.current.update();
+      if (triggerToast) triggerToast(`Camera aligned to ${view}.`);
+    },
+    [triggerToast]
+  );
 
-  // Initialize Three.js Viewport
+  // ── Initialize Scene & Renderer ──
   useEffect(() => {
-    if (!canvasContainerRef.current) return;
-
-    const width = canvasContainerRef.current.clientWidth;
-    const height = canvasContainerRef.current.clientHeight;
+    if (!containerRef.current) return;
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x2c2d28);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-    camera.position.set(0, 0.5, 4.5);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    camera.position.set(4.0, 3.5, 6.0);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    canvasContainerRef.current.appendChild(renderer.domElement);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+
+    containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.minDistance = 1.5;
-    controls.maxDistance = 15;
-    controls.target.set(0, 0.2, 0);
-    controls.addEventListener('start', () => {
-      controlsInteractingRef.current = true;
-    });
-    controls.addEventListener('end', () => {
-      controlsInteractingRef.current = false;
-    });
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 0.5;
+    controls.maxDistance = 200;
+    controls.target.set(0, 1.0, 0);
     controlsRef.current = controls;
 
+    // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(2, 4, 5);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    dirLight.position.set(6, 12, 8);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.bias = -0.0001;
     scene.add(dirLight);
+    dirLightRef.current = dirLight;
 
-    const backLight = new THREE.DirectionalLight(0x89b4fa, 0.4);
-    backLight.position.set(-2, 2, -3);
-    scene.add(backLight);
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.5);
+    rimLight.position.set(-8, 5, -8);
+    scene.add(rimLight);
 
-    const gridHelper = new THREE.GridHelper(10, 20, 0x1f1f2e, 0x11111b);
-    gridHelper.position.y = -1.1;
-    scene.add(gridHelper);
-    gridHelperRef.current = gridHelper;
+    // Ground Grid
+    const grid = new THREE.GridHelper(30, 30, 0x38bdf8, 0x1e293b);
+    grid.position.y = 0;
+    scene.add(grid);
+    gridHelperRef.current = grid;
 
+    // Model Container Group
     const modelGroup = new THREE.Group();
     scene.add(modelGroup);
     modelGroupRef.current = modelGroup;
 
-    const skeletonGroup = new THREE.Group();
-    scene.add(skeletonGroup);
-    skeletonGroupRef.current = skeletonGroup;
-
+    // Resize handler
     const handleResize = () => {
-      if (!canvasContainerRef.current || !rendererRef.current || !cameraRef.current) return;
-      const w = canvasContainerRef.current.clientWidth;
-      const h = canvasContainerRef.current.clientHeight;
+      if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
       cameraRef.current.aspect = w / h;
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(w, h);
@@ -214,653 +203,501 @@ export const ThreeDViewport: React.FC<ThreeDViewportProps> = ({
       window.removeEventListener('resize', handleResize);
       controls.dispose();
       renderer.dispose();
-      if (renderer.domElement) {
-        renderer.domElement.remove();
-      }
+      if (renderer.domElement) renderer.domElement.remove();
       rendererRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
-      controlsRef.current = null;
     };
   }, []);
 
-  // Animation updates (render loop)
+  // ── First-Person Walkthrough Keyboard Listeners ──
   useEffect(() => {
-    let animationFrameId: number;
-    let clock = new THREE.Clock();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      keysPressed.current[e.key.toLowerCase()] = true;
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysPressed.current[e.key.toLowerCase()] = false;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
-    const render = () => {
-      const elapsed = clock.getElapsedTime();
+  // ── Environment Preset Application ──
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
 
-      if (autoRotate && !controlsInteractingRef.current) {
-        if (modelGroupRef.current) modelGroupRef.current.rotation.y += 0.005;
-        if (skeletonGroupRef.current) skeletonGroupRef.current.rotation.y += 0.005;
-      }
+    switch (environmentPreset) {
+      case 'cyberpunk':
+        scene.background = new THREE.Color(0x070913);
+        scene.fog = new THREE.FogExp2(0x070913, 0.035);
+        if (dirLightRef.current) dirLightRef.current.color.setHex(0xa855f7);
+        break;
+      case 'sunset':
+        scene.background = new THREE.Color(0x2d1727);
+        scene.fog = new THREE.FogExp2(0x2d1727, 0.02);
+        if (dirLightRef.current) dirLightRef.current.color.setHex(0xf97316);
+        break;
+      case 'space':
+        scene.background = new THREE.Color(0x010206);
+        scene.fog = null;
+        if (dirLightRef.current) dirLightRef.current.color.setHex(0xffffff);
+        break;
+      case 'grid':
+        scene.background = new THREE.Color(0x0f172a);
+        scene.fog = null;
+        if (dirLightRef.current) dirLightRef.current.color.setHex(0x38bdf8);
+        break;
+      case 'neutral':
+      default:
+        scene.background = new THREE.Color(0x13151b);
+        scene.fog = null;
+        if (dirLightRef.current) dirLightRef.current.color.setHex(0xffffff);
+        break;
+    }
+  }, [environmentPreset]);
 
-      if (controlsRef.current) {
-        controlsRef.current.update();
-      }
+  // ── Visibility & Shadow Toggles ──
+  useEffect(() => {
+    if (gridHelperRef.current) {
+      gridHelperRef.current.visible = showGrid;
+    }
+    if (dirLightRef.current) {
+      dirLightRef.current.castShadow = showShadows;
+    }
+  }, [showGrid, showShadows]);
 
-      if (activeStage === 8 && isAnimating) {
-        const timeFactor = elapsed * 3.5 * animationSpeed;
-        if (animationPreset === 'idle') {
-          if (chestJointRef.current) chestJointRef.current.position.y = -0.1 + Math.sin(elapsed * 2) * 0.02;
-          if (leftArmJointRef.current) leftArmJointRef.current.rotation.z = Math.sin(elapsed * 2) * 0.03;
-          if (rightArmJointRef.current) rightArmJointRef.current.rotation.z = -Math.sin(elapsed * 2) * 0.03;
-        } else if (animationPreset === 'walk') {
-          if (leftArmJointRef.current) leftArmJointRef.current.rotation.x = Math.sin(timeFactor) * 0.4;
-          if (rightArmJointRef.current) rightArmJointRef.current.rotation.x = -Math.sin(timeFactor) * 0.4;
-          if (leftLegJointRef.current) leftLegJointRef.current.rotation.x = -Math.sin(timeFactor) * 0.3;
-          if (rightLegJointRef.current) rightLegJointRef.current.rotation.x = Math.sin(timeFactor) * 0.3;
-          if (modelGroupRef.current) modelGroupRef.current.position.y = Math.abs(Math.sin(timeFactor * 2)) * 0.05;
-        } else if (animationPreset === 'wave') {
-          if (leftArmJointRef.current) {
-            leftArmJointRef.current.rotation.x = 0;
-            leftArmJointRef.current.rotation.z = 1.8 + Math.sin(timeFactor * 1.5) * 0.3;
+  // ── Transforms Binding ──
+  useEffect(() => {
+    if (!modelGroupRef.current) return;
+    modelGroupRef.current.position.set(modelPosition.x, modelPosition.y, modelPosition.z);
+    modelGroupRef.current.rotation.set(
+      (modelRotation.x * Math.PI) / 180,
+      (modelRotation.y * Math.PI) / 180,
+      (modelRotation.z * Math.PI) / 180
+    );
+    modelGroupRef.current.scale.set(modelScale.x, modelScale.y, modelScale.z);
+  }, [modelPosition, modelRotation, modelScale]);
+
+  // ── Load Real 3D Model ──
+  useEffect(() => {
+    const modelGroup = modelGroupRef.current;
+    if (!modelGroup) return;
+
+    // Clear previous children
+    while (modelGroup.children.length > 0) {
+      const child = modelGroup.children[0];
+      modelGroup.remove(child);
+    }
+    mixerRef.current = null;
+    setLoadError(null);
+
+    if (!modelUrl) {
+      // Default preview: sleek geometric studio origin anchor
+      const boxGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+      const wireGeo = new THREE.WireframeGeometry(boxGeo);
+      const wire = new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8 }));
+      wire.position.y = 0.6;
+      modelGroup.add(wire);
+      return;
+    }
+
+    setIsLoading(true);
+
+    const applyShading = (object: THREE.Object3D) => {
+      object.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+
+          if (shadingMode === 'clay') {
+            mesh.material = new THREE.MeshStandardMaterial({
+              color: 0x94a3b8,
+              roughness: 0.6,
+              metalness: 0.1,
+            });
+          } else if (shadingMode === 'wireframe') {
+            mesh.material = new THREE.MeshStandardMaterial({
+              color: 0x38bdf8,
+              wireframe: true,
+            });
+          } else if (shadingMode === 'normals') {
+            mesh.material = new THREE.MeshNormalMaterial();
           }
-          if (rightArmJointRef.current) {
-            rightArmJointRef.current.rotation.z = -0.2;
-            rightArmJointRef.current.rotation.x = 0;
-          }
-        } else if (animationPreset === 'dance') {
-          if (modelGroupRef.current) {
-            modelGroupRef.current.position.y = Math.sin(timeFactor * 1.5) * 0.12;
-            modelGroupRef.current.rotation.y = elapsed * 1.2;
-          }
-          if (leftArmJointRef.current) leftArmJointRef.current.rotation.z = 1.0 + Math.sin(timeFactor) * 0.4;
-          if (rightArmJointRef.current) rightArmJointRef.current.rotation.z = -1.0 - Math.sin(timeFactor) * 0.4;
         }
-      } else {
-        if (modelGroupRef.current) modelGroupRef.current.position.y = 0;
-        if (leftArmJointRef.current) leftArmJointRef.current.rotation.set(0, 0, 0);
-        if (rightArmJointRef.current) rightArmJointRef.current.rotation.set(0, 0, 0);
-        if (leftLegJointRef.current) leftLegJointRef.current.rotation.set(0, 0, 0);
-        if (rightLegJointRef.current) rightLegJointRef.current.rotation.set(0, 0, 0);
-        if (chestJointRef.current) chestJointRef.current.position.set(0, -0.1, 0);
+      });
+    };
+
+    const processLoadedObject = (object: THREE.Object3D, animations?: THREE.AnimationClip[]) => {
+      applyShading(object);
+      modelGroup.add(object);
+
+      // Animation playback if model contains clips
+      if (animations && animations.length > 0) {
+        const mixer = new THREE.AnimationMixer(object);
+        animations.forEach((clip) => mixer.clipAction(clip).play());
+        mixerRef.current = mixer;
+      }
+
+      // Compute statistics & hierarchy
+      let vertexCount = 0;
+      let triangleCount = 0;
+      const nodes: SceneNodeInfo[] = [];
+
+      object.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const m = child as THREE.Mesh;
+          const geom = m.geometry;
+          if (geom) {
+            const pos = geom.getAttribute('position');
+            if (pos) vertexCount += pos.count;
+            if (geom.index) {
+              triangleCount += geom.index.count / 3;
+            } else if (pos) {
+              triangleCount += pos.count / 3;
+            }
+          }
+          nodes.push({
+            id: m.uuid,
+            name: m.name || 'MeshNode',
+            type: 'mesh',
+            visible: true,
+            polyCount: Math.round(triangleCount),
+          });
+        }
+      });
+
+      const box = new THREE.Box3().setFromObject(object);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+
+      if (onStatsLoaded) {
+        onStatsLoaded({
+          vertices: vertexCount,
+          triangles: Math.round(triangleCount),
+          boundingBox: { width: +size.x.toFixed(2), height: +size.y.toFixed(2), depth: +size.z.toFixed(2) },
+          drawCalls: nodes.length,
+        });
+      }
+
+      if (onSceneHierarchyLoaded) {
+        onSceneHierarchyLoaded(nodes);
+      }
+
+      setIsLoading(false);
+    };
+
+    if (modelFormat === 'obj') {
+      const loader = new OBJLoader();
+      loader.load(
+        modelUrl,
+        (obj) => processLoadedObject(obj),
+        undefined,
+        (err) => {
+          console.error('Failed to load OBJ:', err);
+          setLoadError('Failed to load OBJ model.');
+          setIsLoading(false);
+        }
+      );
+    } else if (modelFormat === 'ply') {
+      const loader = new PLYLoader();
+      loader.load(
+        modelUrl,
+        (geometry) => {
+          const material = new THREE.PointsMaterial({ size: 0.05, vertexColors: true });
+          const points = new THREE.Points(geometry, material);
+          processLoadedObject(points);
+        },
+        undefined,
+        (err) => {
+          console.error('Failed to load PLY:', err);
+          setLoadError('Failed to load PLY point cloud.');
+          setIsLoading(false);
+        }
+      );
+    } else {
+      // Default: GLTF/GLB
+      const loader = new GLTFLoader();
+      loader.load(
+        modelUrl,
+        (gltf) => {
+          processLoadedObject(gltf.scene, gltf.animations);
+        },
+        undefined,
+        (err) => {
+          console.error('Failed to load GLTF/GLB:', err);
+          setLoadError('Failed to load GLTF 3D scene.');
+          setIsLoading(false);
+        }
+      );
+    }
+  }, [modelUrl, modelFormat, shadingMode, onStatsLoaded, onSceneHierarchyLoaded]);
+
+  // ── Render & Walkthrough Animation Loop ──
+  useEffect(() => {
+    let animId: number;
+    const clock = new THREE.Clock();
+
+    const animate = () => {
+      const delta = clock.getDelta();
+
+      // Skeletal animation updates
+      if (mixerRef.current) {
+        mixerRef.current.update(delta);
+      }
+
+      // Auto-rotation in orbit mode
+      if (autoRotate && cameraMode === 'orbit' && modelGroupRef.current) {
+        modelGroupRef.current.rotation.y += 0.005;
+      }
+
+      // First-Person Walkthrough Movement
+      if (cameraMode === 'walkthrough' && cameraRef.current) {
+        const speed = 5.0 * delta;
+        const forward = new THREE.Vector3();
+        cameraRef.current.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+
+        const right = new THREE.Vector3().crossVectors(forward, cameraRef.current.up).normalize();
+
+        if (keysPressed.current['w']) cameraRef.current.position.addScaledVector(forward, speed);
+        if (keysPressed.current['s']) cameraRef.current.position.addScaledVector(forward, -speed);
+        if (keysPressed.current['d']) cameraRef.current.position.addScaledVector(right, speed);
+        if (keysPressed.current['a']) cameraRef.current.position.addScaledVector(right, -speed);
+        if (keysPressed.current['e']) cameraRef.current.position.y += speed;
+        if (keysPressed.current['q']) cameraRef.current.position.y = Math.max(0.2, cameraRef.current.position.y - speed);
+
+        if (controlsRef.current) {
+          controlsRef.current.target.copy(cameraRef.current.position).add(forward);
+        }
+      } else if (controlsRef.current) {
+        controlsRef.current.update();
       }
 
       if (rendererRef.current && sceneRef.current && cameraRef.current) {
         rendererRef.current.render(sceneRef.current, cameraRef.current);
       }
-      animationFrameId = requestAnimationFrame(render);
+      animId = requestAnimationFrame(animate);
     };
 
-    render();
+    animate();
+    return () => cancelAnimationFrame(animId);
+  }, [autoRotate, cameraMode]);
 
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [activeStage, animationPreset, animationSpeed, isAnimating, autoRotate]);
-
-  // Procedural checkers textures
-  const createCheckerboardTexture = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#1e1e2e';
-      ctx.fillRect(0, 0, 256, 256);
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 2;
-      for (let i = 0; i <= 256; i += 32) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, 256);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(256, i);
-        ctx.stroke();
-      }
-      ctx.fillStyle = '#f43f5e';
-      ctx.font = '10px monospace';
-      for (let x = 0; x < 256; x += 64) {
-        for (let y = 0; y < 256; y += 64) {
-          ctx.fillText(`U:${x/64} V:${y/64}`, x + 5, y + 15);
-        }
-      }
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2, 2);
-    return texture;
+  // ── Take Screenshot Snapshot ──
+  const handleSnapshot = () => {
+    if (!rendererRef.current) return;
+    const dataUrl = rendererRef.current.domElement.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `superagent-3d-snapshot-${Date.now()}.png`;
+    a.click();
+    if (triggerToast) triggerToast('3D viewport snapshot saved.');
   };
 
-  const createPaintedTexture = (styleName: string, baseColorHex: string) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      const grad = ctx.createLinearGradient(0, 0, 0, 256);
-      grad.addColorStop(0, '#fde047');
-      grad.addColorStop(0.5, '#3b82f6');
-      grad.addColorStop(1, baseColorHex);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 256, 256);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 100, 256, 60);
-      ctx.fillStyle = '#64748b';
-      ctx.fillRect(100, 100, 56, 60);
-
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(80, 50, 10, 0, Math.PI * 2);
-      ctx.arc(176, 50, 10, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(80, 52, 4, 0, Math.PI * 2);
-      ctx.arc(176, 52, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = 'rgba(244, 63, 94, 0.4)';
-      ctx.beginPath();
-      ctx.arc(60, 65, 12, 0, Math.PI * 2);
-      ctx.arc(196, 65, 12, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(128, 60, 8, 0, Math.PI);
-      ctx.stroke();
-    }
-    return new THREE.CanvasTexture(canvas);
-  };
-
-  // Re-build character meshes on stage/shading/material changes
-  useEffect(() => {
-    const scene = sceneRef.current;
-    const modelGroup = modelGroupRef.current;
-    const skeletonGroup = skeletonGroupRef.current;
-    if (!scene || !modelGroup || !skeletonGroup) return;
-
-    while (modelGroup.children.length > 0) {
-      const child = modelGroup.children[0];
-      modelGroup.remove(child);
-    }
-    while (skeletonGroup.children.length > 0) {
-      const child = skeletonGroup.children[0];
-      skeletonGroup.remove(child);
-    }
-
-    if (gridHelperRef.current) {
-      gridHelperRef.current.visible = showGrid;
-    }
-
-    if (activeStage === 1 && !conceptImage) {
-      const boxGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-      const wireframe = new THREE.WireframeGeometry(boxGeo);
-      const line = new THREE.LineSegments(wireframe);
-      line.material = new THREE.LineBasicMaterial({ color: 0x334155, linewidth: 1 });
-      modelGroup.add(line);
-      return;
-    }
-
-    const isLowPoly = activeStage === 4;
-    const radialSegs = isLowPoly ? 6 : 24;
-    const sphereSegs = isLowPoly ? 6 : 32;
-
-    let skinMat: THREE.Material;
-    let hairMat: THREE.Material;
-    let shirtMat: THREE.Material;
-    let skirtMat: THREE.Material;
-    let outlineMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e, wireframe: true, transparent: true, opacity: 0.8 });
-
-    if (shadingMode === 'clay') {
-      const clayMat = new THREE.MeshStandardMaterial({
-        color: 0x64748b,
-        roughness: 0.6,
-        metalness: 0.05,
-        flatShading: isLowPoly
-      });
-      skinMat = clayMat;
-      hairMat = clayMat;
-      shirtMat = clayMat;
-      skirtMat = clayMat;
-    } else if (activeStage === 3) {
-      hairMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.6 });
-      shirtMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.6 });
-      skirtMat = new THREE.MeshStandardMaterial({ color: 0xec4899, roughness: 0.6 });
-      skinMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.6 });
-    } else if (activeStage === 5) {
-      const uvTexture = createCheckerboardTexture();
-      const uvMat = new THREE.MeshBasicMaterial({ map: uvTexture });
-      skinMat = uvMat;
-      hairMat = uvMat;
-      shirtMat = uvMat;
-      skirtMat = uvMat;
-    } else if (activeStage >= 6) {
-      const pTexture = createPaintedTexture(stylization, materialColor);
-      const paintedMat = new THREE.MeshStandardMaterial({
-        map: pTexture,
-        roughness: materialRoughness,
-        metalness: materialMetalness,
-        flatShading: isLowPoly
-      });
-      skinMat = paintedMat;
-      hairMat = paintedMat;
-      shirtMat = paintedMat;
-      skirtMat = paintedMat;
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
     } else {
-      skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: materialRoughness, metalness: materialMetalness, flatShading: isLowPoly });
-      hairMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: materialRoughness, metalness: materialMetalness, flatShading: isLowPoly });
-      shirtMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: materialRoughness, metalness: materialMetalness, flatShading: isLowPoly });
-      skirtMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: materialRoughness, metalness: materialMetalness, flatShading: isLowPoly });
-    }
-
-    const characterGroup = new THREE.Group();
-
-    characterGroup.position.set(modelPosition.x, modelPosition.y, modelPosition.z);
-    characterGroup.rotation.set(
-      THREE.MathUtils.degToRad(modelRotation.x),
-      THREE.MathUtils.degToRad(modelRotation.y),
-      THREE.MathUtils.degToRad(modelRotation.z)
-    );
-    characterGroup.scale.set(modelScale.x, modelScale.y, modelScale.z);
-
-    const chestJoint = new THREE.Group();
-    chestJoint.position.set(0, -0.1, 0);
-    if (visibleNodes.torso_mesh) {
-      const torsoGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.55, radialSegs);
-      const torsoMesh = new THREE.Mesh(torsoGeo, shirtMat);
-      torsoMesh.position.y = 0.2;
-      chestJoint.add(torsoMesh);
-    }
-    characterGroup.add(chestJoint);
-    chestJointRef.current = chestJoint;
-
-    if (visibleNodes.head_mesh) {
-      const neckGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.12, radialSegs);
-      const neckMesh = new THREE.Mesh(neckGeo, skinMat);
-      neckMesh.position.y = 0.52;
-      chestJoint.add(neckMesh);
-
-      const headGeo = new THREE.SphereGeometry(0.32, sphereSegs, sphereSegs);
-      const headMesh = new THREE.Mesh(headGeo, skinMat);
-      headMesh.position.y = 0.78;
-      chestJoint.add(headMesh);
-    }
-
-    if (visibleNodes.hair_clumps) {
-      const hairGeo = new THREE.SphereGeometry(0.2, sphereSegs, sphereSegs);
-      const hairL = new THREE.Mesh(hairGeo, hairMat);
-      hairL.position.set(-0.2, 0.86, 0.1);
-      hairL.scale.set(1, 1.1, 1);
-      chestJoint.add(hairL);
-
-      const hairR = new THREE.Mesh(hairGeo, hairMat);
-      hairR.position.set(0.2, 0.86, 0.1);
-      hairR.scale.set(1, 1.1, 1);
-      chestJoint.add(hairR);
-
-      const hairBackGeo = new THREE.SphereGeometry(0.28, sphereSegs, sphereSegs);
-      const hairBack = new THREE.Mesh(hairBackGeo, hairMat);
-      hairBack.position.set(0, 0.74, -0.15);
-      chestJoint.add(hairBack);
-    }
-
-    if (visibleNodes.skirt_mesh) {
-      const skirtGeo = new THREE.CylinderGeometry(0.22, 0.38, 0.26, radialSegs);
-      const skirtMesh = new THREE.Mesh(skirtGeo, skirtMat);
-      skirtMesh.position.y = -0.12;
-      characterGroup.add(skirtMesh);
-    }
-
-    const leftArmJoint = new THREE.Group();
-    leftArmJoint.position.set(-0.25, 0.38, 0);
-    if (visibleNodes.arm_joints_L) {
-      const armGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.42, radialSegs);
-      const leftArmMesh = new THREE.Mesh(armGeo, skinMat);
-      leftArmMesh.position.y = -0.18;
-      leftArmJoint.add(leftArmMesh);
-    }
-    chestJoint.add(leftArmJoint);
-    leftArmJointRef.current = leftArmJoint;
-
-    const rightArmJoint = new THREE.Group();
-    rightArmJoint.position.set(0.25, 0.38, 0);
-    if (visibleNodes.arm_joints_R) {
-      const armGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.42, radialSegs);
-      const rightArmMesh = new THREE.Mesh(armGeo, skinMat);
-      rightArmMesh.position.y = -0.18;
-      rightArmJoint.add(rightArmMesh);
-    }
-    chestJoint.add(rightArmJoint);
-    rightArmJointRef.current = rightArmJoint;
-
-    const leftLegJoint = new THREE.Group();
-    leftLegJoint.position.set(-0.12, -0.22, 0);
-    if (visibleNodes.leg_joints_L) {
-      const legGeo = new THREE.CylinderGeometry(0.08, 0.07, 0.62, radialSegs);
-      const leftLegMesh = new THREE.Mesh(legGeo, skinMat);
-      leftLegMesh.position.y = -0.3;
-      leftLegJoint.add(leftLegMesh);
-    }
-    characterGroup.add(leftLegJoint);
-    leftLegJointRef.current = leftLegJoint;
-
-    const rightLegJoint = new THREE.Group();
-    rightLegJoint.position.set(0.12, -0.22, 0);
-    if (visibleNodes.leg_joints_R) {
-      const legGeo = new THREE.CylinderGeometry(0.08, 0.07, 0.62, radialSegs);
-      const rightLegMesh = new THREE.Mesh(legGeo, skinMat);
-      rightLegMesh.position.y = -0.3;
-      rightLegJoint.add(rightLegMesh);
-    }
-    characterGroup.add(rightLegJoint);
-    rightLegJointRef.current = rightLegJoint;
-
-    if (activeStage === 4) {
-      const outlineGeo = (mesh: THREE.Mesh) => new THREE.Mesh(mesh.geometry.clone(), outlineMat);
-      
-      leftArmJoint.children.forEach(c => {
-        if (c instanceof THREE.Mesh) {
-          const outline = outlineGeo(c);
-          outline.position.copy(c.position);
-          leftArmJoint.add(outline);
-        }
-      });
-      rightArmJoint.children.forEach(c => {
-        if (c instanceof THREE.Mesh) {
-          const outline = outlineGeo(c);
-          outline.position.copy(c.position);
-          rightArmJoint.add(outline);
-        }
-      });
-      leftLegJoint.children.forEach(c => {
-        if (c instanceof THREE.Mesh) {
-          const outline = outlineGeo(c);
-          outline.position.copy(c.position);
-          leftLegJoint.add(outline);
-        }
-      });
-      rightLegJoint.children.forEach(c => {
-        if (c instanceof THREE.Mesh) {
-          const outline = outlineGeo(c);
-          outline.position.copy(c.position);
-          rightLegJoint.add(outline);
-        }
-      });
-    }
-
-    modelGroup.add(characterGroup);
-
-    if (activeStage === 7) {
-      const jointGeo = new THREE.SphereGeometry(0.04, 16, 16);
-      const boneMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false, linewidth: 2 });
-
-      characterGroup.traverse((node: any) => {
-        if (node.isMesh) {
-          node.material = new THREE.MeshBasicMaterial({
-            color: 0x334155,
-            transparent: true,
-            opacity: 0.35,
-            wireframe: false
-          });
-        }
-      });
-
-      const joints = [
-        { name: 'root', pos: [0, -0.22, 0] },
-        { name: 'pelvis', pos: [0, -0.1, 0] },
-        { name: 'chest', pos: [0, 0.28, 0] },
-        { name: 'neck', pos: [0, 0.42, 0] },
-        { name: 'head', pos: [0, 0.68, 0] },
-        { name: 'shoulder_L', pos: [-0.25, 0.28, 0] },
-        { name: 'elbow_L', pos: [-0.25, 0.1, 0] },
-        { name: 'wrist_L', pos: [-0.25, -0.1, 0] },
-        { name: 'shoulder_R', pos: [0.25, 0.28, 0] },
-        { name: 'elbow_R', pos: [0.25, 0.1, 0] },
-        { name: 'wrist_R', pos: [0.25, -0.1, 0] },
-        { name: 'hip_L', pos: [-0.12, -0.22, 0] },
-        { name: 'knee_L', pos: [-0.12, -0.5, 0] },
-        { name: 'ankle_L', pos: [-0.12, -0.8, 0] },
-        { name: 'hip_R', pos: [0.12, -0.22, 0] },
-        { name: 'knee_R', pos: [0.12, -0.5, 0] },
-        { name: 'ankle_R', pos: [0.12, -0.8, 0] }
-      ];
-
-      const jointMeshes: Record<string, THREE.Mesh> = {};
-      joints.forEach((j) => {
-        const mesh = new THREE.Mesh(jointGeo, boneMat);
-        mesh.position.set(j.pos[0], j.pos[1], j.pos[2]);
-        skeletonGroup.add(mesh);
-        jointMeshes[j.name] = mesh;
-      });
-
-      const connections = [
-        ['root', 'pelvis'],
-        ['pelvis', 'chest'],
-        ['chest', 'neck'],
-        ['neck', 'head'],
-        ['chest', 'shoulder_L'],
-        ['shoulder_L', 'elbow_L'],
-        ['elbow_L', 'wrist_L'],
-        ['chest', 'shoulder_R'],
-        ['shoulder_R', 'elbow_R'],
-        ['elbow_R', 'wrist_R'],
-        ['pelvis', 'hip_L'],
-        ['hip_L', 'knee_L'],
-        ['knee_L', 'ankle_L'],
-        ['pelvis', 'hip_R'],
-        ['hip_R', 'knee_R'],
-        ['knee_R', 'ankle_R']
-      ];
-
-      connections.forEach(([fromName, toName]) => {
-        const fromMesh = jointMeshes[fromName];
-        const toMesh = jointMeshes[toName];
-        if (fromMesh && toMesh) {
-          const points = [fromMesh.position, toMesh.position];
-          const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-          const line = new THREE.Line(lineGeo, lineMat);
-          skeletonGroup.add(line);
-        }
-      });
-    }
-
-  }, [activeStage, shadingMode, showGrid, conceptImage, stylization, visibleNodes, modelPosition, modelRotation, modelScale, materialColor, materialRoughness, materialMetalness]);
-
-  const getViewportStats = () => {
-    switch (activeStage) {
-      case 1:
-        return { faces: '—', vertices: '—' };
-      case 2:
-        return { faces: '2,342,002', vertices: '1,170,969' };
-      case 3:
-        return { faces: '1,499,850', vertices: '740,897' };
-      case 4:
-        return { faces: '23,955', vertices: '12,613' };
-      case 5:
-        return { faces: '23,955', vertices: '12,613' };
-      case 6:
-        return { faces: '23,955', vertices: '12,613' };
-      case 7:
-        return { faces: '23,955', vertices: '12,613' };
-      case 8:
-        return {
-          faces: result?.provider === 'local' ? '12 (procedural cube)' : '23,955',
-          vertices: result?.provider === 'local' ? '8' : '12,613'
-        };
-      default:
-        return { faces: '—', vertices: '—' };
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
   };
-
-  const stats = getViewportStats();
 
   return (
     <div
-      ref={canvasContainerRef}
-      className="flex-1 h-full cursor-grab active:cursor-grabbing relative overflow-hidden"
+      ref={containerRef}
+      className="flex-1 relative w-full h-full bg-slate-950 overflow-hidden select-none outline-none"
+      tabIndex={0}
     >
-      {/* Middle Top stats HUD */}
-      <div className="absolute top-4 left-1/2 translate-x-[-50%] flex gap-4 px-4 py-2 rounded-full border border-slate-800/80 bg-slate-950/90 backdrop-blur-md shadow-lg z-20 pointer-events-none select-none font-mono">
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider">Faces:</span>
-          <span className="text-[10px] text-sky-400 font-bold">{stats.faces}</span>
-        </div>
-        <div className="w-[1px] bg-slate-800" />
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider">Vertices:</span>
-          <span className="text-[10px] text-sky-400 font-bold">{stats.vertices}</span>
-        </div>
-      </div>
-
-      {/* Viewport Floating Widgets (Top Right) */}
-      <div className="absolute right-4 top-4 flex flex-col gap-2.5 z-20">
-        {/* Ground Grid Switch */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-855 bg-slate-950/90 backdrop-blur-md shadow-md text-[9px] font-medium text-slate-400">
-          <Grid size={12} className="text-slate-500" />
-          <span>Ground Grid</span>
-          <button
-            onClick={() => onShowGridChange(!showGrid)}
-            className={`w-6 h-3 rounded-full transition-all relative ${
-              showGrid ? 'bg-sky-500' : 'bg-slate-800'
-            }`}
-          >
-            <div className={`w-2 h-2 rounded-full bg-white absolute top-0.5 transition-all ${
-              showGrid ? 'right-0.5' : 'left-0.5'
-            }`} />
-          </button>
-        </div>
-
-        {/* Auto rotate Switch */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-855 bg-slate-950/90 backdrop-blur-md shadow-md text-[9px] font-medium text-slate-400">
-          <Compass size={12} className="text-slate-500" />
-          <span>Auto Rotate</span>
-          <button
-            onClick={() => onAutoRotateChange(!autoRotate)}
-            className={`w-6 h-3 rounded-full transition-all relative ${
-              autoRotate ? 'bg-sky-500' : 'bg-slate-800'
-            }`}
-          >
-            <div className={`w-2 h-2 rounded-full bg-white absolute top-0.5 transition-all ${
-              autoRotate ? 'right-0.5' : 'left-0.5'
-            }`} />
-          </button>
-        </div>
-
-        {/* Navigation Snap axes HUD */}
-        <div className="rounded-xl border border-slate-855 bg-slate-950/90 backdrop-blur-md shadow-lg p-2.5 text-slate-400 flex flex-col gap-1.5">
-          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Axis Snaps</div>
-          <div className="grid grid-cols-3 gap-1">
-            {(['front', 'back', 'left', 'right', 'top', 'bottom'] as const).map(dir => (
-              <button
-                key={dir}
-                onClick={() => snapToView(dir)}
-                className="px-1.5 py-1 bg-slate-900 border border-slate-800 rounded hover:bg-slate-800 text-[8px] uppercase tracking-wider font-mono text-slate-300 font-semibold cursor-pointer"
-              >
-                {dir.slice(0, 3)}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => snapToView('reset')}
-            className="w-full py-1 bg-slate-800 hover:bg-slate-700 text-[8px] uppercase tracking-wider font-semibold rounded mt-1 cursor-pointer text-center text-slate-300"
-          >
-            Center Cam
-          </button>
-        </div>
-
-        {/* Running Pipeline Status */}
-        <div className="w-[180px] rounded-xl border border-slate-855 bg-slate-950/90 backdrop-blur-md shadow-lg p-3 text-slate-400 select-none">
-          <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 mb-1.5 flex items-center justify-between">
-            <span>Pipeline Progress</span>
-            <ChevronDown size={10} />
-          </div>
-          <div className="space-y-1.5 text-[9px]">
-            {[
-              { label: 'Concept Design', stage: 1 },
-              { label: 'Mesh Generation', stage: 2 },
-              { label: 'Segmentation', stage: 3 }
-            ].map((node) => {
-              const isDone = activeStage > node.stage;
-              const isCurrent = activeStage === node.stage;
-              return (
-                <div key={node.label} className="flex items-center gap-2.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${
-                    isDone
-                      ? 'bg-slate-600'
-                      : isCurrent
-                      ? 'bg-sky-400 animate-pulse'
-                      : 'bg-slate-800'
-                  }`} />
-                  <span className={`${isDone ? 'text-slate-600 line-through' : isCurrent ? 'text-sky-400 font-semibold' : 'text-slate-500'}`}>
-                    {node.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* VIEWPORT CONTROLS BAR (BOTTOM CENTER) */}
-      <div className="absolute bottom-4 left-1/2 translate-x-[-50%] flex items-center gap-3 px-4 py-2 rounded-xl border border-slate-800/80 bg-slate-950/95 backdrop-blur-md shadow-lg z-20">
-        {/* Shading modes circles */}
-        <div className="flex items-center gap-2 pr-3 border-r border-slate-800">
-          {[
-            { mode: 'clay', tooltip: 'Solid Clay Shading', color: 'bg-slate-500 border-white/20' },
-            { mode: 'flat', tooltip: 'Standard Shading', color: 'bg-slate-300 border-white/20' },
-            { mode: 'textured', tooltip: 'Textured Painting Shading', color: 'bg-gradient-to-tr from-sky-400 via-pink-400 to-yellow-400 border-white/20' }
-          ].map((sh) => (
+      {/* ── Top Viewport HUD Overlay ── */}
+      <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none z-10">
+        {/* Shading & View Pills */}
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/80 border border-slate-800 backdrop-blur-md pointer-events-auto">
+          {(['textured', 'clay', 'wireframe', 'normals'] as ShadingMode[]).map((mode) => (
             <button
-              key={sh.mode}
-              title={sh.tooltip}
-              onClick={() => onShadingModeChange(sh.mode as any)}
-              className={`w-5 h-5 rounded-full border-2 cursor-pointer transition-all hover:scale-110 active:scale-95 ${sh.color} ${
-                shadingMode === sh.mode ? 'border-sky-500 ring-2 ring-sky-500/20 shadow-lg' : 'border-transparent'
+              key={mode}
+              onClick={() => onShadingModeChange(mode)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                shadingMode === mode
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-400/50'
+                  : 'text-slate-400 hover:text-white'
               }`}
-            />
+            >
+              {mode}
+            </button>
           ))}
         </div>
 
-        {/* Download dropdown */}
+        {/* Camera Navigation Mode & Environment Presets */}
+        <div className="flex items-center gap-1.5 pointer-events-auto">
+          {/* Camera Mode (Orbit vs Walkthrough) */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/80 border border-slate-800 backdrop-blur-md">
+            <button
+              onClick={() => {
+                onCameraModeChange('orbit');
+                if (triggerToast) triggerToast('Switched to Orbit Camera.');
+              }}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                cameraMode === 'orbit'
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-400/50'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Orbit Camera (Rotate, Pan, Zoom)"
+            >
+              <Camera size={13} />
+              <span>Orbit</span>
+            </button>
+            <button
+              onClick={() => {
+                onCameraModeChange('walkthrough');
+                if (triggerToast) triggerToast('Walkthrough active: Use WASD to walk, Q/E for elevation.');
+              }}
+              className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                cameraMode === 'walkthrough'
+                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/50'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="First-Person Walkthrough (WASD navigation at human eye level)"
+            >
+              <Footprints size={13} />
+              <span>Walkthrough</span>
+            </button>
+          </div>
+
+          {/* Environment Selector */}
+          <div className="p-1 rounded-xl bg-slate-900/80 border border-slate-800 backdrop-blur-md">
+            <select
+              value={environmentPreset}
+              onChange={(e) => onEnvironmentPresetChange(e.target.value as EnvironmentPreset)}
+              className="bg-transparent text-[11px] font-medium text-slate-300 outline-none px-2 py-0.5 cursor-pointer"
+            >
+              <option value="neutral" className="bg-slate-900">Studio Neutral</option>
+              <option value="cyberpunk" className="bg-slate-900">Cyberpunk Night</option>
+              <option value="sunset" className="bg-slate-900">Sunset Glow</option>
+              <option value="space" className="bg-slate-900">Deep Space Void</option>
+              <option value="grid" className="bg-slate-900">Architectural Grid</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Floating Ortho Snap Cube Controls (Right Top) ── */}
+      <div className="absolute top-16 right-3 flex flex-col gap-1 p-1 rounded-xl bg-slate-900/80 border border-slate-800 backdrop-blur-md z-10">
         <button
-          onClick={() => {
-            if (result?.ok && result.path) {
-              triggerToast(`Mesh downloaded to local path: ${result.path}`, 'info');
-            } else {
-              triggerToast('Run stage 2 generation first to compile download artifacts.', 'info');
-            }
-          }}
-          className="flex items-center gap-1.5 py-1 px-3 bg-sky-500 hover:bg-sky-400 transition-all rounded-lg text-white font-bold text-[9px] uppercase tracking-wider cursor-pointer"
+          onClick={() => snapToView('top')}
+          className="p-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all text-center"
+          title="Top View"
         >
-          <Download size={10} />
-          <span>Export</span>
+          TOP
+        </button>
+        <button
+          onClick={() => snapToView('front')}
+          className="p-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all text-center"
+          title="Front View"
+        >
+          FRNT
+        </button>
+        <button
+          onClick={() => snapToView('right')}
+          className="p-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all text-center"
+          title="Right View"
+        >
+          RGHT
+        </button>
+        <button
+          onClick={() => snapToView('isometric')}
+          className="p-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all text-center"
+          title="Isometric View"
+        >
+          ISO
+        </button>
+        <div className="h-px bg-slate-800 my-0.5" />
+        <button
+          onClick={() => snapToView('reset')}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all flex items-center justify-center"
+          title="Reset Camera"
+        >
+          <RotateCcw size={12} />
         </button>
       </div>
 
-      {/* FEEDBACK BUTTONS (BOTTOM RIGHT) */}
-      <div className="absolute bottom-4 right-4 flex items-center gap-2 z-20">
-        <button
-          onClick={() => triggerToast('Feedback sent! Thank you.')}
-          className="w-8 h-8 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-all cursor-pointer"
-        >
-          <ThumbsUp size={12} />
-        </button>
-        <button
-          onClick={() => triggerToast('Feedback recorded.')}
-          className="w-8 h-8 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-all cursor-pointer"
-        >
-          <ThumbsDown size={12} />
-        </button>
-        <button
-          onClick={() => triggerToast('Share link copied to clipboard.')}
-          className="w-8 h-8 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-all cursor-pointer"
-        >
-          <Share2 size={12} />
-        </button>
+      {/* ── Bottom Viewport Tools (Grid, Shadows, Auto-Rotate, Snapshot, Fullscreen) ── */}
+      <div className="absolute bottom-3 left-3 flex items-center gap-2 z-10">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/80 border border-slate-800 backdrop-blur-md">
+          <button
+            onClick={() => onShowGridChange(!showGrid)}
+            className={`p-1.5 rounded-lg text-xs transition-all ${
+              showGrid ? 'bg-sky-500/20 text-sky-400' : 'text-slate-400 hover:text-white'
+            }`}
+            title="Toggle Ground Grid"
+          >
+            <Grid size={14} />
+          </button>
+          <button
+            onClick={() => onShowShadowsChange(!showShadows)}
+            className={`p-1.5 rounded-lg text-xs transition-all ${
+              showShadows ? 'bg-sky-500/20 text-sky-400' : 'text-slate-400 hover:text-white'
+            }`}
+            title="Toggle Real-Time Shadows"
+          >
+            <Sun size={14} />
+          </button>
+          <button
+            onClick={() => onAutoRotateChange(!autoRotate)}
+            className={`p-1.5 rounded-lg text-xs transition-all ${
+              autoRotate ? 'bg-sky-500/20 text-sky-400' : 'text-slate-400 hover:text-white'
+            }`}
+            title="Toggle Auto-Rotate"
+          >
+            <RotateCcw size={14} />
+          </button>
+          <button
+            onClick={handleSnapshot}
+            className="p-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+            title="Take High-Resolution Snapshot"
+          >
+            <Camera size={14} />
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="p-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+            title="Toggle Fullscreen"
+          >
+            <Maximize2 size={14} />
+          </button>
+        </div>
+
+        {/* Walkthrough Navigation Hint */}
+        {cameraMode === 'walkthrough' && (
+          <div className="px-2.5 py-1 rounded-lg bg-indigo-500/20 border border-indigo-400/40 text-[10px] text-indigo-300 font-medium flex items-center gap-1.5 shadow-md">
+            <Footprints size={12} className="text-indigo-400" />
+            <span>WASD to walk • Q/E elevation</span>
+          </div>
+        )}
       </div>
+
+      {/* ── Loading Overlay ── */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-2 z-20">
+          <div className="w-8 h-8 rounded-full border-2 border-sky-400 border-t-transparent animate-spin" />
+          <span className="text-xs font-semibold text-slate-200">Loading 3D asset geometry & textures...</span>
+        </div>
+      )}
+
+      {/* ── Error Banner ── */}
+      {loadError && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-medium flex items-center gap-2 z-20">
+          <ShieldAlert size={14} />
+          <span>{loadError}</span>
+        </div>
+      )}
     </div>
   );
 };
-export default ThreeDViewport;

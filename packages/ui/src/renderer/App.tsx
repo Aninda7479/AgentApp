@@ -232,9 +232,8 @@ export const App: React.FC = () => {
   // URL-driven initial route (web: history path, desktop: file:// hash).
   const [initialRoute] = useState(() => getRouteFromLocation());
   const [activeTab, setActiveTab] = useState<string>(initialRoute.activeTab);
-  // Whether the dedicated 3D Workspace nav entry is shown: only when 3D Model Gen
-  // is enabled AND its mode is "studio" (per the user's chat-vs-page decision).
-  const [showStudio, setShowStudio] = useState<boolean>(false);
+  // 3D Studio Workspace visibility state
+  const [showStudio, setShowStudio] = useState<boolean>(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
   const [mobileRightOpen, setMobileRightOpen] = useState<boolean>(false);
@@ -1331,7 +1330,7 @@ export const App: React.FC = () => {
       .invoke('settings-read')
       .then((current: any) => {
         const cfg = current?.threeD || {};
-        setShowStudio(cfg.enabled === true && cfg.mode === 'studio');
+        setShowStudio(cfg.enabled !== false);
       })
       .catch(() => {});
   }, [ipc]);
@@ -2124,6 +2123,11 @@ export const App: React.FC = () => {
             <ThreeDStudio
               partners={partnersRef.current}
               triggerToast={triggerToast}
+              onBack={() => setActiveTab('trajectory')}
+              onOpenSettings={() => {
+                setSettingsCategory('3d');
+                setActiveTab('settings');
+              }}
             />
           )}
 

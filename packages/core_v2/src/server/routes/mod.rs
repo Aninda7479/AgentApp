@@ -6,6 +6,7 @@ pub mod pcb;
 pub mod routines;
 mod storage;
 pub mod system;
+pub mod threed;
 pub mod videos;
 
 pub use artifacts::*;
@@ -16,6 +17,7 @@ pub use pcb::*;
 pub use routines::*;
 pub use storage::serve_storage_file;
 pub use system::*;
+pub use threed::*;
 pub use videos::*;
 
 use axum::{
@@ -166,6 +168,24 @@ pub fn create_router(state: AppState) -> Router {
             post(export_video_route),
         )
         .route("/api/videos/prompt/enhance", post(enhance_video_prompt))
+        .route("/api/threed/engine/status", get(get_threed_engine_status))
+        .route("/api/threed/engine/install", post(install_threed_engine))
+        .route("/api/threed/hardware", get(get_threed_hardware_profile))
+        .route("/api/threed/models", get(list_threed_models))
+        .route("/api/threed/models/pull", post(pull_threed_model))
+        .route("/api/threed/models/open-dir", post(open_threed_models_dir))
+        .route("/api/threed/models/:id", delete(delete_threed_model))
+        .route("/api/threed/generate", post(generate_threed))
+        .route("/api/threed/generate/stream", post(generate_threed_stream))
+        .route("/api/threed/generations", get(list_threed_generations))
+        .route(
+            "/api/threed/generations/:id",
+            get(get_threed_generation).delete(delete_threed_generation),
+        )
+        .route(
+            "/api/threed/generations/:id/file",
+            get(get_threed_generation_file),
+        )
         .route("/api/artifacts", get(list_artifacts))
         .route("/api/artifacts/:id/start", post(start_artifact))
         .route("/api/artifacts/:id/stop", post(stop_artifact))

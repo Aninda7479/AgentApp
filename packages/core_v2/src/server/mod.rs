@@ -62,6 +62,7 @@ pub async fn start_server(
 
     let persona_store = Arc::new(PersonaStore::new(&superagent_dir));
     let coordinator = Arc::new(Coordinator::new(persona_store.clone()));
+    let threed_workspace = Arc::new(crate::threed_workspace::ThreeDWorkspaceManager::new());
 
     let mut registry = ToolRegistry::new();
     registry.register(ReadFileTool::new(workspace_root.clone()));
@@ -82,6 +83,7 @@ pub async fn start_server(
     registry.register(CreateArtifactAppTool::new());
     registry.register(ListArtifactsTool::new());
     registry.register(ReadArtifactTool::new());
+    registry.register(ThreeDTool::new(threed_workspace.clone()));
     registry.register(QuestionTool::new());
     registry.register(PatchTool::new(workspace_root.clone()));
     registry.register(ApplyPatchTool::new(workspace_root.clone()));
@@ -149,6 +151,7 @@ pub async fn start_server(
         pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
         image_workspace,
         video_workspace,
+        threed_workspace,
         telegram_bot,
     };
 
