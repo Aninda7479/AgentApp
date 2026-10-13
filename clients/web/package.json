@@ -1,0 +1,25 @@
+{
+  "name": "@superagent/web-client",
+  "version": "0.44.0",
+  "private": true,
+  "description": "SuperAgent Dedicated Web Client — Decoupled browser UI connecting to SuperAgent Core v2 via HTTP/WS",
+  "Description": "Decoupled Web Client package manifest",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "lucide-react": "^1.22.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.8"
+  }
+}

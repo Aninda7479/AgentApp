@@ -14,7 +14,7 @@ This document is the persistent memory ledger for the end-to-end migration of Su
 | Phase | Description | Target Surface | Lead Role / Subagent | Status | Git Commit |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Phase 1** | Core v2 Hardening & Canonical Wire Protocol | `packages/core_v2` | Core Specialist | `COMPLETED` | `feat(core_v2): establish canonical protocol module and session-scoped ws subscriptions` |
-| **Phase 2** | Web Client Decoupling & Overlay Port Auto-Discovery | `clients/web`, `dictation-native`, `artifacts-native` | Web & Overlay Specialist | `NOT_STARTED` | - |
+| **Phase 2** | Web Client Decoupling & Overlay Port Auto-Discovery | `clients/web`, `dictation-native`, `artifacts-native` | Web & Overlay Specialist | `COMPLETED` | `feat(web,overlays): decouple web client and add dynamic overlay port auto-discovery` |
 | **Phase 3** | Linux Dedicated UI (GTK4 + Libadwaita) | `clients/linux` | Linux Specialist | `NOT_STARTED` | - |
 | **Phase 4** | macOS Dedicated UI (SwiftUI Native) | `clients/macos` | macOS Specialist | `NOT_STARTED` | - |
 | **Phase 5** | Windows Dedicated UI (WinUI 3 Native) | `clients/windows` | Windows Specialist | `NOT_STARTED` | - |
@@ -48,13 +48,16 @@ This document is the persistent memory ledger for the end-to-end migration of Su
 ### Phase 2: Web Client Decoupling & Overlay Port Auto-Discovery
 * **Objective**:
   1. Create `clients/web/` workspace package representing the pure browser client (derived from existing React UI, clean fetch/WS IPC).
-  2. Update `packages/dictation-native` and `packages/artifacts-native` to read `~/.superagent/web_server.lock` to dynamically detect daemon port instead of hardcoding `1469`.
-* **Status**: `NOT_STARTED`
+  2. Update `packages/dictation-native` and `packages/artifacts-native` to read `~/.superagent/web-server.lock` to dynamically detect daemon port instead of hardcoding `1469`.
+* **Status**: `COMPLETED`
 * **Checkpoints**:
-  - [ ] Dictation overlay port discovery implemented and verified
-  - [ ] Artifacts overlay port discovery implemented and verified
-  - [ ] Web client scaffolded under `clients/web/`
-  - [ ] Git commit created
+  - [x] Dictation overlay port discovery implemented (`SUPERAGENT_PORT` -> `web-server.lock` candidates -> fallback `1469`) and verified with unit test
+  - [x] Artifacts overlay port discovery implemented across all 5 IPC endpoints (`artifact:list`, `artifact:start`, `artifact:stop`, `artifact:delete`, `artifact:toggleAutostart`) and verified with unit test
+  - [x] Web client scaffolded under `clients/web/` (`@superagent/web-client`) with standalone browser entry (`index.html`, `main.tsx`), client configuration (`config.ts`), DaemonClient HTTP/WS protocol bridge (`client.ts`), and React UI (`App.tsx`)
+  - [x] Added `"clients/web"` to root `package.json` workspaces, added `build:web` and `test:web`
+  - [x] Web client builds cleanly (`npm run build:web`) and unit tests pass (`npm run test:web`)
+  - [x] Rust workspace compiles cleanly (`cargo check --workspace`) and passes code formatting check (`cargo fmt -- --check`)
+  - [x] Verification completed for Phase 2 commit: `feat(web,overlays): decouple web client and add dynamic overlay port auto-discovery`
 
 ---
 

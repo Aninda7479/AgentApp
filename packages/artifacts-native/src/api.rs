@@ -105,6 +105,58 @@ fn get_local_session_token() -> Option<String> {
     None
 }
 
+/// Dynamically discovers the running SuperAgent core daemon port.
+/// Checks SUPERAGENT_PORT env var first, then ~/.superagent/web-server.lock
+/// and ~/.superagent/runtime/web-server.lock, falling back to 1469.
+pub fn discover_daemon_port() -> u16 {
+    if let Ok(port_str) = std::env::var("SUPERAGENT_PORT") {
+        if let Ok(p) = port_str.trim().parse::<u16>() {
+            if p > 0 {
+                return p;
+            }
+        }
+    }
+
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok();
+
+    if let Some(home_str) = home {
+        let home_path = PathBuf::from(home_str);
+        let candidates = [
+            home_path.join(".superagent").join("web-server.lock"),
+            home_path
+                .join(".superagent")
+                .join("runtime")
+                .join("web-server.lock"),
+            PathBuf::from(".")
+                .join(".superagent")
+                .join("web-server.lock"),
+            PathBuf::from(".")
+                .join(".superagent")
+                .join("runtime")
+                .join("web-server.lock"),
+        ];
+
+        for path in &candidates {
+            if let Ok(content) = fs::read_to_string(path) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(port) = val.get("port").and_then(|v| {
+                        v.as_u64()
+                            .or_else(|| v.as_str().and_then(|s| s.parse::<u64>().ok()))
+                    }) {
+                        if port > 0 && port <= 65535 {
+                            return port as u16;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    1469
+}
+
 /// Scans local disk artifacts directory directly as a zero-latency fallback.
 pub fn scan_local_artifacts() -> Vec<ArtifactRuntimeState> {
     let dir = get_artifacts_dir();
@@ -152,8 +204,9 @@ pub async fn fetch_artifacts() -> Vec<ArtifactRuntimeState> {
         Err(_) => return scan_local_artifacts(),
     };
 
-    let url = "http://127.0.0.1:1469/api/ipc/artifact:list";
-    let mut req = client.post(url).json(&serde_json::json!({ "args": [] }));
+    let port = discover_daemon_port();
+    let url = format!("http://127.0.0.1:{}/api/ipc/artifact:list", port);
+    let mut req = client.post(&url).json(&serde_json::json!({ "args": [] }));
 
     if let Some(token) = get_local_session_token() {
         req = req.header("Authorization", format!("Bearer {}", token));
@@ -183,8 +236,9 @@ pub async fn start_artifact(id: &str) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let url = "http://127.0.0.1:1469/api/ipc/artifact:start";
-    let mut req = client.post(url).json(&serde_json::json!({ "args": [id] }));
+    let port = discover_daemon_port();
+    let url = format!("http://127.0.0.1:{}/api/ipc/artifact:start", port);
+    let mut req = client.post(&url).json(&serde_json::json!({ "args": [id] }));
 
     if let Some(token) = get_local_session_token() {
         req = req.header("Authorization", format!("Bearer {}", token));
@@ -205,8 +259,9 @@ pub async fn stop_artifact(id: &str) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let url = "http://127.0.0.1:1469/api/ipc/artifact:stop";
-    let mut req = client.post(url).json(&serde_json::json!({ "args": [id] }));
+    let port = discover_daemon_port();
+    let url = format!("http://127.0.0.1:{}/api/ipc/artifact:stop", port);
+    let mut req = client.post(&url).json(&serde_json::json!({ "args": [id] }));
 
     if let Some(token) = get_local_session_token() {
         req = req.header("Authorization", format!("Bearer {}", token));
@@ -227,8 +282,9 @@ pub async fn delete_artifact(id: &str) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let url = "http://127.0.0.1:1469/api/ipc/artifact:delete";
-    let mut req = client.post(url).json(&serde_json::json!({ "args": [id] }));
+    let port = discover_daemon_port();
+    let url = format!("http://127.0.0.1:{}/api/ipc/artifact:delete", port);
+    let mut req = client.post(&url).json(&serde_json::json!({ "args": [id] }));
 
     if let Some(token) = get_local_session_token() {
         req = req.header("Authorization", format!("Bearer {}", token));
@@ -266,8 +322,9 @@ pub async fn toggle_autostart(id: &str, autostart: bool) -> Result<(), String> {
         Err(_) => return Ok(()),
     };
 
-    let url = "http://127.0.0.1:1469/api/ipc/artifact:toggleAutostart";
-    let mut req = client.post(url).json(&serde_json::json!({
+    let port = discover_daemon_port();
+    let url = format!("http://127.0.0.1:{}/api/ipc/artifact:toggleAutostart", port);
+    let mut req = client.post(&url).json(&serde_json::json!({
         "args": [{ "id": id, "autostart": autostart }]
     }));
 
@@ -289,4 +346,15 @@ pub fn open_artifacts_folder() {
     let dir = get_artifacts_dir();
     let _ = fs::create_dir_all(&dir);
     let _ = open::that(&dir);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_discover_daemon_port() {
+        let port = discover_daemon_port();
+        assert!(port > 0);
+    }
 }
