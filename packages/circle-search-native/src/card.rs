@@ -1,10 +1,8 @@
-use egui::{
-    vec2, Align2, Color32, FontId, Id, Key, Pos2, Rect, Rounding, ScrollArea, Stroke, TextEdit,
-};
+use egui::{vec2, Color32, FontId, Id, Key, Pos2, Rect, Rounding, ScrollArea, Stroke, TextEdit};
 
 use crate::theme::{
-    self, COLOR_ACCENT_CYAN, COLOR_ACCENT_TERRACOTTA, COLOR_BORDER_CARD, COLOR_BORDER_SUBTLE,
-    COLOR_STATUS_CRIMSON, COLOR_TEXT_DIM, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED,
+    self, COLOR_ACCENT_CYAN, COLOR_ACCENT_TERRACOTTA, COLOR_BORDER_SUBTLE, COLOR_STATUS_CRIMSON,
+    COLOR_TEXT_DIM, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED,
 };
 
 fn action_button(text: &str, is_primary: bool) -> egui::Button<'_> {
@@ -73,7 +71,6 @@ pub struct CardRenderContext<'a> {
 pub enum CardAction {
     SubmitQuery(String),
     CopyText(String),
-    CopyImage,
     Redraw,
     Close,
 }
@@ -243,33 +240,13 @@ pub fn render_hero_card(
                             .color(COLOR_TEXT_MAIN),
                     );
 
-                    ui.add_space(6.0);
-                    let tabs = [
-                        (ActiveTab::All, "All"),
-                        (ActiveTab::Insights, "Insights"),
-                        (ActiveTab::CodeOcr, "Code & OCR"),
-                        (ActiveTab::Web, "Web"),
-                    ];
-
-                    for (tab, label) in tabs {
-                        let is_active = *render_ctx.active_tab == tab;
-                        let tab_btn = egui::Button::new(
-                            egui::RichText::new(label).size(11.5).color(if is_active {
-                                COLOR_ACCENT_CYAN
-                            } else {
-                                COLOR_TEXT_MUTED
-                            }),
-                        )
-                        .fill(Color32::TRANSPARENT);
-
-                        if ui.add(tab_btn).clicked() {
-                            *render_ctx.active_tab = tab;
-                        }
-                    }
-
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let close_btn = action_button("✕", false);
-                        if ui.add(close_btn).clicked() {
+                        if ui
+                            .add(close_btn)
+                            .on_hover_text("Hide overlay (Esc)")
+                            .clicked()
+                        {
                             pending_action = Some(CardAction::Close);
                         }
 
@@ -277,9 +254,9 @@ pub fn render_hero_card(
                             let label = if render_ctx.copied_toast_timer > 0.0
                                 && render_ctx.copied_toast_msg.contains("Text")
                             {
-                                "✓ Text"
+                                "✓ Copied"
                             } else {
-                                "📋 Text"
+                                "📋 Copy"
                             };
                             let copy_btn = action_button(label, false);
                             if ui.add(copy_btn).clicked() {
@@ -290,20 +267,12 @@ pub fn render_hero_card(
                         }
 
                         if render_ctx.selection_rect.is_some() {
-                            let label = if render_ctx.copied_toast_timer > 0.0
-                                && render_ctx.copied_toast_msg.contains("Image")
-                            {
-                                "✓ Image"
-                            } else {
-                                "📷 Image"
-                            };
-                            let copy_img_btn = action_button(label, false);
-                            if ui.add(copy_img_btn).clicked() {
-                                pending_action = Some(CardAction::CopyImage);
-                            }
-
                             let redraw_btn = action_button("🔄 Redraw", false);
-                            if ui.add(redraw_btn).clicked() {
+                            if ui
+                                .add(redraw_btn)
+                                .on_hover_text("Circle new area")
+                                .clicked()
+                            {
                                 pending_action = Some(CardAction::Redraw);
                             }
                         }
@@ -314,132 +283,106 @@ pub fn render_hero_card(
                 ui.separator();
                 ui.add_space(6.0);
 
-                // Content Area with insights & thumbnail
+                // Content Area with generous auto-expanding reading height
+                let min_h = if render_ctx.ai_response.is_some() {
+                    240.0f32
+                } else if render_ctx.is_loading {
+                    60.0f32
+                } else {
+                    40.0f32
+                };
+
                 ScrollArea::vertical()
-                    .max_height(360.0)
+                    .min_scrolled_height(min_h)
+                    .max_height(480.0)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        ui.horizontal_top(|ui| {
-                            ui.vertical(|ui| {
-                                ui.set_width(
-                                    ui.available_width()
-                                        - if render_ctx.crop_texture.is_some() {
-                                            105.0
-                                        } else {
-                                            0.0
-                                        },
-                                );
+                        ui.set_min_height(min_h);
+                        ui.vertical(|ui| {
+                            // Loading state
+                            if render_ctx.is_loading {
+                                ui.horizontal(|ui| {
+                                    ui.spinner();
+                                    ui.add_space(6.0);
+                                    ui.label(
+                                        egui::RichText::new("Analyzing visual context...")
+                                            .font(FontId::proportional(13.0))
+                                            .color(COLOR_ACCENT_CYAN),
+                                    );
+                                });
+                                ui.add_space(8.0);
+                            }
 
-                                // Loading state
-                                if render_ctx.is_loading {
-                                    ui.horizontal(|ui| {
-                                        ui.spinner();
-                                        ui.add_space(6.0);
+                            // Formatted AI Insights
+                            if let Some(ref text) = render_ctx.ai_response {
+                                for line in text.lines() {
+                                    let trimmed = line.trim();
+                                    if trimmed.is_empty() {
+                                        ui.add_space(4.0);
+                                        continue;
+                                    }
+
+                                    // Filter out redundant boilerplate intros/headings
+                                    let lower = trimmed.to_lowercase();
+                                    if lower.starts_with("visual intelligence analysis")
+                                        || lower.starts_with("**visual intelligence analysis")
+                                        || lower.starts_with("🔍 **visual intelligence analysis")
+                                        || lower.starts_with("visual analysis")
+                                        || lower.starts_with("here is what is happening")
+                                    {
+                                        continue;
+                                    }
+
+                                    if trimmed.starts_with("# ") || trimmed.starts_with("## ") {
+                                        let h = trimmed.trim_start_matches('#').trim();
                                         ui.label(
-                                            egui::RichText::new("Analyzing visual context...")
-                                                .font(FontId::proportional(13.0))
-                                                .color(COLOR_ACCENT_CYAN),
-                                        );
-                                    });
-                                    ui.add_space(8.0);
-                                }
-
-                                // Formatted AI Insights
-                                if let Some(ref text) = render_ctx.ai_response {
-                                    for line in text.lines() {
-                                        let trimmed = line.trim();
-                                        if trimmed.is_empty() {
-                                            ui.add_space(5.0);
-                                        } else if trimmed.starts_with("# ")
-                                            || trimmed.starts_with("## ")
-                                        {
-                                            let h = trimmed.trim_start_matches('#').trim();
-                                            ui.label(
-                                                egui::RichText::new(h)
-                                                    .font(FontId::proportional(14.0))
-                                                    .strong()
-                                                    .color(COLOR_TEXT_MAIN),
-                                            );
-                                        } else if trimmed.starts_with("### ")
-                                            || trimmed.starts_with("Key Facts")
-                                        {
-                                            ui.add_space(3.0);
-                                            ui.label(
-                                                egui::RichText::new(
-                                                    trimmed.trim_start_matches('#').trim(),
-                                                )
-                                                .font(FontId::proportional(12.5))
+                                            egui::RichText::new(h)
+                                                .font(FontId::proportional(14.0))
                                                 .strong()
-                                                .color(COLOR_ACCENT_TERRACOTTA),
+                                                .color(COLOR_TEXT_MAIN),
+                                        );
+                                    } else if trimmed.starts_with("### ")
+                                        || trimmed.starts_with("Key Facts")
+                                    {
+                                        ui.add_space(3.0);
+                                        ui.label(
+                                            egui::RichText::new(
+                                                trimmed.trim_start_matches('#').trim(),
+                                            )
+                                            .font(FontId::proportional(12.5))
+                                            .strong()
+                                            .color(COLOR_ACCENT_TERRACOTTA),
+                                        );
+                                    } else if trimmed.starts_with("- ")
+                                        || trimmed.starts_with("• ")
+                                        || trimmed.starts_with("* ")
+                                    {
+                                        let bullet_text = &trimmed[2..];
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.spacing_mut().item_spacing = vec2(3.0, 2.0);
+                                            ui.label(
+                                                egui::RichText::new("•")
+                                                    .font(FontId::proportional(12.0))
+                                                    .color(COLOR_ACCENT_TERRACOTTA),
                                             );
-                                        } else if trimmed.starts_with("- ")
-                                            || trimmed.starts_with("• ")
-                                            || trimmed.starts_with("* ")
-                                        {
-                                            let bullet_text = &trimmed[2..];
-                                            ui.horizontal_wrapped(|ui| {
-                                                ui.spacing_mut().item_spacing = vec2(3.0, 2.0);
-                                                ui.label(
-                                                    egui::RichText::new("•")
-                                                        .font(FontId::proportional(12.0))
-                                                        .color(COLOR_ACCENT_TERRACOTTA),
-                                                );
-                                                render_styled_text_chunk(ui, bullet_text);
-                                            });
-                                        } else {
-                                            ui.horizontal_wrapped(|ui| {
-                                                ui.spacing_mut().item_spacing = vec2(3.0, 2.0);
-                                                render_styled_text_chunk(ui, trimmed);
-                                            });
-                                        }
+                                            render_styled_text_chunk(ui, bullet_text);
+                                        });
+                                    } else {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.spacing_mut().item_spacing = vec2(3.0, 2.0);
+                                            render_styled_text_chunk(ui, trimmed);
+                                        });
                                     }
                                 }
+                            }
 
-                                // Error state
-                                if let Some(ref err) = render_ctx.error_msg {
-                                    ui.label(
-                                        egui::RichText::new(format!("⚠ {}", err))
-                                            .font(FontId::proportional(12.0))
-                                            .color(COLOR_STATUS_CRIMSON),
-                                    );
-                                }
-                            });
-
-                            // Upper-Right Cropped Selection Thumbnail (compact badge)
-                            if let Some(ref crop_tex) = render_ctx.crop_texture {
-                                let (rect, response) =
-                                    ui.allocate_exact_size(vec2(95.0, 75.0), egui::Sense::click());
-
-                                ui.painter().image(
-                                    crop_tex.id(),
-                                    rect,
-                                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                                    Color32::WHITE,
+                            // Error state
+                            if let Some(ref err) = render_ctx.error_msg {
+                                ui.label(
+                                    egui::RichText::new(format!("⚠ {}", err))
+                                        .font(FontId::proportional(12.0))
+                                        .color(COLOR_STATUS_CRIMSON),
                                 );
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    Rounding::same(8.0),
-                                    Stroke::new(1.0, COLOR_BORDER_CARD),
-                                );
-
-                                if response.hovered() {
-                                    ui.painter().rect_filled(
-                                        rect,
-                                        Rounding::same(8.0),
-                                        Color32::from_rgba_unmultiplied(0, 0, 0, 160),
-                                    );
-                                    ui.painter().text(
-                                        rect.center(),
-                                        Align2::CENTER_CENTER,
-                                        "📷 Copy",
-                                        FontId::proportional(11.0),
-                                        Color32::WHITE,
-                                    );
-                                }
-
-                                if response.clicked() {
-                                    pending_action = Some(CardAction::CopyImage);
-                                }
                             }
                         });
                     });
@@ -466,19 +409,12 @@ pub fn render_hero_card(
 
                     ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("Press Enter to send")
-                                .font(FontId::proportional(10.5))
-                                .color(COLOR_TEXT_DIM),
+                            egui::RichText::new(
+                                "Press Enter to send • Esc to hide • Ctrl+Q to quit",
+                            )
+                            .font(FontId::proportional(10.5))
+                            .color(COLOR_TEXT_DIM),
                         );
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let lens_btn = action_button("✦ Recapture", false);
-
-                            if ui.add(lens_btn).clicked() {
-                                *render_ctx.is_lens_active = true;
-                                *render_ctx.selection_rect = None;
-                            }
-                        });
                     });
                 });
             }

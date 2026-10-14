@@ -1,12 +1,10 @@
-use egui::{Color32, Id, Key, LayerId, Order, Pos2, Rect, Rounding, Stroke};
+use egui::{Color32, Id, Key, LayerId, Order, Pos2, Rect, Rounding};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::api::query_circle_search;
-use crate::capture::{
-    crop_to_base64_jpeg, crop_to_color_image, crop_to_image_data, CapturedScreen,
-};
-use crate::card::{render_hero_card, ActiveTab, CardAction, CardRenderContext};
-use crate::theme::{self, COLOR_BORDER_SUBTLE, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED};
+use crate::capture::{crop_to_base64_jpeg, crop_to_color_image, CapturedScreen};
+use crate::card::{render_hero_card, CardAction, CardRenderContext};
+use crate::theme;
 
 pub struct CircleSearchApp {
     screen_info: CapturedScreen,
@@ -23,7 +21,6 @@ pub struct CircleSearchApp {
     query: String,
     follow_up_query: String,
     active_mode: String,
-    active_tab: ActiveTab,
     is_loading: bool,
     ai_response: Option<String>,
     error_msg: Option<String>,
@@ -35,10 +32,15 @@ pub struct CircleSearchApp {
 
     response_rx: Receiver<Result<String, String>>,
     response_tx: Sender<Result<String, String>>,
+    hotkey_rx: Receiver<()>,
 }
 
 impl CircleSearchApp {
-    pub fn new(captured: CapturedScreen, cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(
+        captured: CapturedScreen,
+        cc: &eframe::CreationContext<'_>,
+        hotkey_rx: Receiver<()>,
+    ) -> Self {
         let width = captured.image.width() as usize;
         let height = captured.image.height() as usize;
         let raw_rgba = captured.image.as_flat_samples();
@@ -66,7 +68,6 @@ impl CircleSearchApp {
             query: String::new(),
             follow_up_query: String::new(),
             active_mode: "general".to_string(),
-            active_tab: ActiveTab::All,
             is_loading: false,
             ai_response: None,
             error_msg: None,
@@ -76,7 +77,51 @@ impl CircleSearchApp {
             is_dragging_card: false,
             response_rx: rx,
             response_tx: tx,
+            hotkey_rx,
         }
+    }
+
+    pub fn hide_overlay(&mut self, ctx: &egui::Context) {
+        self.selection_rect = None;
+        self.crop_texture = None;
+        self.drag_start = None;
+        self.drag_current = None;
+        self.is_drawing = false;
+        self.is_lens_active = false;
+        self.is_fullscreen_mode = false;
+        self.query.clear();
+        self.follow_up_query.clear();
+        self.is_loading = false;
+        self.ai_response = None;
+        self.error_msg = None;
+        self.card_pos = None;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        ctx.request_repaint();
+    }
+
+    pub fn reload_screen(&mut self, ctx: &egui::Context, captured: CapturedScreen) {
+        let width = captured.image.width() as usize;
+        let height = captured.image.height() as usize;
+        let raw_rgba = captured.image.as_flat_samples();
+        let color_image =
+            egui::ColorImage::from_rgba_unmultiplied([width, height], raw_rgba.as_slice());
+
+        self.screen_texture =
+            Some(ctx.load_texture("screen_capture", color_image, egui::TextureOptions::LINEAR));
+        self.screen_info = captured;
+        self.selection_rect = None;
+        self.crop_texture = None;
+        self.drag_start = None;
+        self.drag_current = None;
+        self.is_drawing = false;
+        self.is_lens_active = false;
+        self.is_fullscreen_mode = false;
+        self.query.clear();
+        self.follow_up_query.clear();
+        self.is_loading = false;
+        self.ai_response = None;
+        self.error_msg = None;
+        self.card_pos = None;
     }
 
     fn get_pixel_crop_coords(&self, ctx: &egui::Context, rect: Rect) -> (u32, u32, u32, u32) {
@@ -110,7 +155,11 @@ impl CircleSearchApp {
         self.error_msg = None;
         self.active_mode = mode.clone();
 
-        let image_b64 = if self.is_fullscreen_mode {
+        let image_b64 = if let Some(rect) = self.selection_rect {
+            let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
+            crop_to_base64_jpeg(&self.screen_info.image, px, py, pw, ph).ok()
+        } else {
+            // Default: full screen capture when asking without a manual circle
             crop_to_base64_jpeg(
                 &self.screen_info.image,
                 0,
@@ -119,11 +168,6 @@ impl CircleSearchApp {
                 self.screen_info.image.height(),
             )
             .ok()
-        } else if let Some(rect) = self.selection_rect {
-            let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
-            crop_to_base64_jpeg(&self.screen_info.image, px, py, pw, ph).ok()
-        } else {
-            None
         };
 
         let tx = self.response_tx.clone();
@@ -131,28 +175,6 @@ impl CircleSearchApp {
             let res = query_circle_search(prompt, image_b64, mode).await;
             let _ = tx.send(res);
         });
-    }
-
-    fn copy_image_to_clipboard(&mut self, ctx: &egui::Context) {
-        let rect_opt = self.selection_rect.or_else(|| {
-            if self.is_fullscreen_mode {
-                Some(ctx.screen_rect())
-            } else {
-                None
-            }
-        });
-
-        if let Some(rect) = rect_opt {
-            let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
-            if let Ok(img_data) = crop_to_image_data(&self.screen_info.image, px, py, pw, ph) {
-                if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                    if clipboard.set_image(img_data).is_ok() {
-                        self.copied_toast_timer = 2.0;
-                        self.copied_toast_msg = "✓ Image copied to clipboard".to_string();
-                    }
-                }
-            }
-        }
     }
 
     fn copy_text_to_clipboard(&mut self, text: &str) {
@@ -167,6 +189,22 @@ impl CircleSearchApp {
 
 impl eframe::App for CircleSearchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 0. Background Hotkey listener (Ctrl+Shift+S)
+        if self.hotkey_rx.try_recv().is_ok() {
+            if let Ok(fresh) = crate::capture::capture_active_screen() {
+                let w = fresh.width as f32;
+                let h = fresh.height as f32;
+                let ox = fresh.origin_x;
+                let oy = fresh.origin_y;
+                self.reload_screen(ctx, fresh);
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(ox, oy)));
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            ctx.request_repaint();
+        }
+
         // 1. Process async intelligence response
         if let Ok(res) = self.response_rx.try_recv() {
             self.is_loading = false;
@@ -186,9 +224,15 @@ impl eframe::App for CircleSearchApp {
             ctx.request_repaint();
         }
 
-        // 3. Global keyboard handlers: Escape quits immediately
-        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+        // 3. Global keyboard handlers:
+        // Ctrl+Q / Cmd+Q quits the application entirely
+        if ctx.input(|i| (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(Key::Q)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
+        // Escape hides the overlay without quitting
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            self.hide_overlay(ctx);
         }
 
         // 4. Draw Captured Desktop Background
@@ -253,49 +297,6 @@ impl eframe::App for CircleSearchApp {
         if let Some(rect) = current_rect {
             theme::paint_cutout_mask(&painter, screen_rect, rect);
             theme::paint_selection_marquee(&painter, rect);
-
-            // Floating Quick "Copy Image" Pill near selection bottom-right
-            let copy_btn_rect = Rect::from_min_size(
-                Pos2::new((rect.max.x - 110.0).max(rect.min.x), rect.max.y + 10.0),
-                egui::vec2(105.0, 28.0),
-            );
-
-            let copy_hovered = ctx.input(|i| {
-                i.pointer
-                    .hover_pos()
-                    .is_some_and(|p| copy_btn_rect.contains(p))
-            });
-
-            painter.rect_filled(
-                copy_btn_rect,
-                Rounding::same(10.0),
-                if copy_hovered {
-                    Color32::from_rgba_unmultiplied(33, 34, 38, 250)
-                } else {
-                    Color32::from_rgba_unmultiplied(24, 25, 27, 230)
-                },
-            );
-            painter.rect_stroke(
-                copy_btn_rect,
-                Rounding::same(10.0),
-                Stroke::new(1.0, COLOR_BORDER_SUBTLE),
-            );
-            painter.text(
-                copy_btn_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                "📷 Copy Image",
-                egui::FontId::proportional(11.0),
-                if copy_hovered {
-                    COLOR_TEXT_MAIN
-                } else {
-                    COLOR_TEXT_MUTED
-                },
-            );
-
-            if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && copy_hovered)
-            {
-                self.copy_image_to_clipboard(ctx);
-            }
         } else if self.is_lens_active {
             painter.rect_filled(screen_rect, Rounding::ZERO, theme::COLOR_BG_OVERLAY);
         }
@@ -309,14 +310,12 @@ impl eframe::App for CircleSearchApp {
         let render_ctx = CardRenderContext {
             query: &mut self.query,
             follow_up_query: &mut self.follow_up_query,
-            active_tab: &mut self.active_tab,
             is_loading: self.is_loading,
             is_lens_active: &mut self.is_lens_active,
             is_fullscreen_mode: &mut self.is_fullscreen_mode,
             ai_response: &self.ai_response,
             error_msg: &self.error_msg,
             selection_rect: &mut self.selection_rect,
-            crop_texture: &self.crop_texture,
             copied_toast_timer: self.copied_toast_timer,
             copied_toast_msg: &self.copied_toast_msg,
         };
@@ -335,17 +334,15 @@ impl eframe::App for CircleSearchApp {
                 CardAction::CopyText(t) => {
                     self.copy_text_to_clipboard(&t);
                 }
-                CardAction::CopyImage => {
-                    self.copy_image_to_clipboard(ctx);
-                }
                 CardAction::Redraw => {
                     self.selection_rect = None;
                     self.crop_texture = None;
                     self.ai_response = None;
                     self.error_msg = None;
+                    self.is_lens_active = true;
                 }
                 CardAction::Close => {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    self.hide_overlay(ctx);
                 }
             }
         }

@@ -374,6 +374,7 @@ pub fn crop_to_color_image(
     ))
 }
 
+#[allow(dead_code)]
 pub fn crop_to_image_data(
     img: &image::RgbaImage,
     x: u32,
