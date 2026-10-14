@@ -10,17 +10,18 @@ import { useLatestRelease } from '../lib/useLatestRelease.js'
 
 export default function Home() {
   const release = useLatestRelease()
+  const [downloadType, setDownloadType] = useState('native') // 'native' | 'classic'
   const userOs = release.userOs || 'windows'
 
   const directDownloadUrl =
-    userOs === 'macos' ? release.desktop.mac :
-    userOs === 'linux' ? release.desktop.linux :
-    release.desktop.win
+    downloadType === 'native'
+      ? (userOs === 'macos' ? release.native?.mac : userOs === 'linux' ? release.native?.linux : release.native?.win)
+      : (userOs === 'macos' ? release.classic?.mac : userOs === 'linux' ? release.classic?.linux : release.classic?.win)
 
   const directDownloadLabel =
-    userOs === 'macos' ? 'Download for macOS (.dmg)' :
-    userOs === 'linux' ? 'Download for Linux (.AppImage)' :
-    'Download for Windows (.exe)'
+    downloadType === 'native'
+      ? (userOs === 'macos' ? 'Download Native macOS (SwiftUI)' : userOs === 'linux' ? 'Download Native Linux (GTK4)' : 'Download Native Windows (WinUI 3)')
+      : (userOs === 'macos' ? 'Download Classic macOS (.dmg)' : userOs === 'linux' ? 'Download Classic Linux (.AppImage)' : 'Download Classic Windows (.exe)')
 
   // Interactive mock state
   const [mockStep, setMockStep] = useState(1)
@@ -83,7 +84,38 @@ export default function Home() {
               </a>
             </div>
 
-            <div className="hero-meta">
+            {/* Flavor Switcher */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>Package:</span>
+              <button
+                type="button"
+                onClick={() => setDownloadType('native')}
+                style={{
+                  background: downloadType === 'native' ? 'rgba(217, 160, 102, 0.16)' : 'transparent',
+                  color: downloadType === 'native' ? 'var(--accent)' : 'var(--muted)',
+                  border: '1px solid ' + (downloadType === 'native' ? 'rgba(217, 160, 102, 0.35)' : 'transparent'),
+                  borderRadius: '6px', fontSize: '0.72rem', padding: '3px 8px', cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                  fontWeight: downloadType === 'native' ? '600' : '400'
+                }}
+              >
+                ⚡ Dedicated Native
+              </button>
+              <button
+                type="button"
+                onClick={() => setDownloadType('classic')}
+                style={{
+                  background: downloadType === 'classic' ? 'rgba(217, 160, 102, 0.16)' : 'transparent',
+                  color: downloadType === 'classic' ? 'var(--accent)' : 'var(--muted)',
+                  border: '1px solid ' + (downloadType === 'classic' ? 'rgba(217, 160, 102, 0.35)' : 'transparent'),
+                  borderRadius: '6px', fontSize: '0.72rem', padding: '3px 8px', cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                  fontWeight: downloadType === 'classic' ? '600' : '400'
+                }}
+              >
+                📦 Classic Tauri
+              </button>
+            </div>
+
+            <div className="hero-meta" style={{ marginTop: '14px' }}>
               <span>v{release.version}</span>
               <span>•</span>
               <a href="#install">All downloads &amp; CLI options ↓</a>

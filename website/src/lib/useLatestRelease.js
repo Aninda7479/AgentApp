@@ -57,6 +57,11 @@ function buildReleaseData(version, tag, platformInfo, assets = null, publishedAt
   const linuxDeb = findUrl(/^SuperAgent.*\.deb$/i) || `${REPO}/releases/download/${tagName}/SuperAgent_${cleanVer}_amd64.deb`
   const linuxRpm = findUrl(/^SuperAgent.*\.rpm$/i) || `${REPO}/releases/download/${tagName}/SuperAgent-${cleanVer}-1.x86_64.rpm`
 
+  // Dedicated Native Desktop Client links (WinUI 3, SwiftUI, GTK4)
+  const nativeWin = findUrl(/^superagent-windows-native.*\.zip$/i) || `${REPO}/releases/download/${tagName}/superagent-windows-native-v${cleanVer}-x64.zip`
+  const nativeMac = findUrl(/^superagent-macos-native.*\.tar\.gz$/i) || `${REPO}/releases/download/${tagName}/superagent-macos-native-v${cleanVer}-universal.tar.gz`
+  const nativeLinux = findUrl(/^superagent-linux-native.*\.tar\.gz$/i) || `${REPO}/releases/download/${tagName}/superagent-linux-native-v${cleanVer}-x64.tar.gz`
+
   // CLI / Standalone Server links
   const cliLinuxX64 = findUrl(/^superagent-cli.*linux-x64.*\.tar\.gz$/i) || `${REPO}/releases/download/${tagName}/superagent-cli-v${cleanVer}-linux-x64.tar.gz`
   const cliLinuxArm = findUrl(/^superagent-cli.*linux-arm64.*\.tar\.gz$/i) || `${REPO}/releases/download/${tagName}/superagent-cli-v${cleanVer}-linux-arm64.tar.gz`
@@ -73,7 +78,22 @@ function buildReleaseData(version, tag, platformInfo, assets = null, publishedAt
     publishedAt,
     allReleasesUrl: allReleasesUrl || (cleanVer ? `${REPO}/releases/tag/${tagName}` : RELEASES_LATEST),
     extension: extensionZip,
+    native: {
+      win: nativeWin,
+      mac: nativeMac,
+      linux: nativeLinux,
+    },
     desktop: {
+      win: winExe,
+      winMsi: winMsi,
+      mac: platformInfo.isArm ? macArm : (macIntel || macArm),
+      macArm: macArm,
+      macIntel: macIntel || macArm,
+      linux: linuxAppImage,
+      linuxDeb: linuxDeb,
+      linuxRpm: linuxRpm,
+    },
+    classic: {
       win: winExe,
       winMsi: winMsi,
       mac: platformInfo.isArm ? macArm : (macIntel || macArm),

@@ -131,9 +131,25 @@ export function CliFork() {
 export function DesktopFork() {
   const release = useLatestRelease()
   const [activeOs, setActiveOs] = useState(null)
+  const [flavor, setFlavor] = useState('native') // 'native' | 'classic'
   const [copied, copy] = useCopy()
 
   const currentOs = activeOs || release.userOs || 'windows'
+
+  const nativeUrl =
+    currentOs === 'windows' ? release.native?.win :
+    currentOs === 'macos' ? release.native?.mac :
+    release.native?.linux
+
+  const nativeFilename =
+    currentOs === 'windows' ? `superagent-windows-native-v${release.version}-x64.zip` :
+    currentOs === 'macos' ? `superagent-macos-native-v${release.version}-universal.tar.gz` :
+    `superagent-linux-native-v${release.version}-x64.tar.gz`
+
+  const nativeDesc =
+    currentOs === 'windows' ? 'Native WinUI 3 (C# / XAML) • Fluent Mica • Lowest RAM & latency' :
+    currentOs === 'macos' ? 'Native SwiftUI (Swift 5.9) • Universal Apple Silicon & Intel • Metal-accelerated' :
+    'Native GTK4 & Libadwaita (Pure Rust) • Native Wayland & X11 desktop client'
 
   return (
     <Reveal className="fork">
@@ -151,16 +167,17 @@ export function DesktopFork() {
       </div>
 
       <h3>The Desktop App</h3>
-      <p>A native OS client featuring the visual workspace and your always-on-top 3D companion pet window.</p>
+      <p>Choose between our next-generation <b>Dedicated Native Client</b> (fastest, lowest memory) or the <b>Classic Cross-Platform App</b> (Tauri).</p>
       
-      <div className="dl-row" style={{ marginTop: '20px', marginBottom: '10px' }}>
-        <a 
-          className="dl-btn" 
-          href={release.desktop.win} 
-          download
+      {/* OS Selector Tabs */}
+      <div className="dl-row" style={{ marginTop: '16px', marginBottom: '10px' }}>
+        <button
+          type="button"
+          className={`dl-btn ${currentOs === 'windows' ? 'active' : ''}`}
           style={{
             borderColor: currentOs === 'windows' ? 'var(--accent)' : 'var(--line-2)',
-            background: currentOs === 'windows' ? 'rgba(217, 160, 102, 0.08)' : undefined
+            background: currentOs === 'windows' ? 'rgba(217, 160, 102, 0.12)' : undefined,
+            cursor: 'pointer'
           }}
           onClick={() => setActiveOs('windows')}
         >
@@ -168,14 +185,14 @@ export function DesktopFork() {
             <path d="M0 3.449L9.75 2.1v9.45H0V3.449zM0 12.45h9.75v9.45L0 20.551v-8.1zM10.8 1.95L24 0v11.55H10.8V1.95zM10.8 12.45H24v11.55l-13.2-1.95v-9.6z" />
           </svg>
           Windows
-        </a>
-        <a 
-          className="dl-btn" 
-          href={release.desktop.mac} 
-          download
+        </button>
+        <button
+          type="button"
+          className={`dl-btn ${currentOs === 'macos' ? 'active' : ''}`}
           style={{
             borderColor: currentOs === 'macos' ? 'var(--accent)' : 'var(--line-2)',
-            background: currentOs === 'macos' ? 'rgba(217, 160, 102, 0.08)' : undefined
+            background: currentOs === 'macos' ? 'rgba(217, 160, 102, 0.12)' : undefined,
+            cursor: 'pointer'
           }}
           onClick={() => setActiveOs('macos')}
         >
@@ -183,14 +200,14 @@ export function DesktopFork() {
             <path d="M17.05 20.28c-.98.95-2.05 1.88-3.08 1.88-1.02 0-1.4-.62-2.55-.62-1.14 0-1.57.6-2.52.62-1.02.02-2.18-.98-3.18-1.93-2.02-1.96-3.57-5.52-3.57-8.87 0-5.3 3.43-8.1 6.8-8.1 1.05 0 2.05.65 2.7.65.63 0 1.83-.78 3.1-.78 1.34 0 2.56.55 3.32 1.48-3.18 1.88-2.65 6.13.52 7.42-1.22 2.92-2.8 5.75-4.14 7.28zM12.03 4.3c.72-1.1 1.48-2.5 1.13-4.3-1.53.08-3.23 1.07-3.9 2.1-1.12 1.55-1.1 2.9-.8 4.3 1.6.02 2.95-.9 3.57-2.1z" />
           </svg>
           macOS
-        </a>
-        <a 
-          className="dl-btn" 
-          href={release.desktop.linux} 
-          download
+        </button>
+        <button
+          type="button"
+          className={`dl-btn ${currentOs === 'linux' ? 'active' : ''}`}
           style={{
             borderColor: currentOs === 'linux' ? 'var(--accent)' : 'var(--line-2)',
-            background: currentOs === 'linux' ? 'rgba(217, 160, 102, 0.08)' : undefined
+            background: currentOs === 'linux' ? 'rgba(217, 160, 102, 0.12)' : undefined,
+            cursor: 'pointer'
           }}
           onClick={() => setActiveOs('linux')}
         >
@@ -200,92 +217,168 @@ export function DesktopFork() {
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
           Linux
-        </a>
+        </button>
       </div>
 
-      {/* Direct sub-options for the active OS */}
+      {/* Flavor Segmented Switcher (Native vs Classic) */}
       <div style={{
-        display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center',
-        padding: '7px 12px', background: 'rgba(0, 0, 0, 0.25)',
-        borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '14px'
+        display: 'flex', gap: '4px', background: 'rgba(0, 0, 0, 0.35)',
+        padding: '3px', borderRadius: '8px', border: '1px solid var(--line)',
+        marginBottom: '14px'
       }}>
-        <span style={{ fontSize: '0.74rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>Package:</span>
-        {currentOs === 'windows' && (
-          <>
-            <a href={release.desktop.win} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
-              ↓ Installer (.exe)
-            </a>
-            <span style={{ color: 'var(--line-2)' }}>•</span>
-            <a href={release.desktop.winMsi} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
-              ↓ MSI (.msi)
-            </a>
-          </>
-        )}
-        {currentOs === 'macos' && (
-          <>
-            <a href={release.desktop.macArm} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
-              ↓ Apple Silicon (.dmg)
-            </a>
-            <span style={{ color: 'var(--line-2)' }}>•</span>
-            <a href={release.desktop.macIntel} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
-              ↓ Intel (.dmg)
-            </a>
-          </>
-        )}
-        {currentOs === 'linux' && (
-          <>
-            <a href={release.desktop.linux} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
-              ↓ AppImage
-            </a>
-            <span style={{ color: 'var(--line-2)' }}>•</span>
-            <a href={release.desktop.linuxDeb} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
-              ↓ DEB (.deb)
-            </a>
-            <span style={{ color: 'var(--line-2)' }}>•</span>
-            <a href={release.desktop.linuxRpm} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
-              ↓ RPM (.rpm)
-            </a>
-          </>
-        )}
-        {currentOs === 'macos' && (
-          <div style={{
-            width: '100%', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--line-2)',
-            display: 'flex', flexDirection: 'column', gap: '4px'
-          }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-              💡 If macOS Gatekeeper says "app is damaged", run in Terminal:
-            </span>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: 'rgba(0, 0, 0, 0.4)', borderRadius: '6px', padding: '4px 8px',
-              border: '1px solid var(--line)'
-            }}>
-              <code style={{ fontSize: '0.72rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
-                xattr -cr /Applications/SuperAgent.app
-              </code>
-              <button
-                type="button"
-                onClick={() => copy('xattr -cr /Applications/SuperAgent.app')}
-                style={{
-                  background: 'transparent', border: 'none', color: copied ? 'var(--accent)' : 'var(--muted)',
-                  cursor: 'pointer', fontSize: '0.68rem', fontFamily: 'var(--font-mono)',
-                  padding: '2px 6px', borderRadius: '4px'
-                }}
-                title="Copy terminal command"
-              >
-                {copied ? 'copied ✓' : 'copy'}
-              </button>
-            </div>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => setFlavor('native')}
+          style={{
+            flex: 1, padding: '6px 10px', fontSize: '0.74rem',
+            fontFamily: 'var(--font-mono)', borderRadius: '6px', cursor: 'pointer',
+            border: 'none', transition: 'all 0.15s ease',
+            background: flavor === 'native' ? 'rgba(217, 160, 102, 0.2)' : 'transparent',
+            color: flavor === 'native' ? 'var(--accent)' : 'var(--muted)',
+            fontWeight: flavor === 'native' ? '600' : '400'
+          }}
+        >
+          ⚡ Dedicated Native Binary (Fastest)
+        </button>
+        <button
+          type="button"
+          onClick={() => setFlavor('classic')}
+          style={{
+            flex: 1, padding: '6px 10px', fontSize: '0.74rem',
+            fontFamily: 'var(--font-mono)', borderRadius: '6px', cursor: 'pointer',
+            border: 'none', transition: 'all 0.15s ease',
+            background: flavor === 'classic' ? 'rgba(217, 160, 102, 0.2)' : 'transparent',
+            color: flavor === 'classic' ? 'var(--accent)' : 'var(--muted)',
+            fontWeight: flavor === 'classic' ? '600' : '400'
+          }}
+        >
+          📦 Classic Tauri App
+        </button>
       </div>
+
+      {/* View Content depending on selected flavor */}
+      {flavor === 'native' ? (
+        <div style={{
+          padding: '12px 14px', background: 'rgba(217, 160, 102, 0.04)',
+          borderRadius: '8px', border: '1px solid rgba(217, 160, 102, 0.25)',
+          marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.76rem', color: 'var(--accent)', fontWeight: '600', fontFamily: 'var(--font-mono)' }}>
+              {currentOs === 'windows' ? '🪟 WinUI 3 Native Client' : currentOs === 'macos' ? '🍎 SwiftUI Native Client' : '🐧 GTK4 / Libadwaita Client'}
+            </span>
+            <span style={{ fontSize: '0.68rem', color: 'var(--ok)', background: 'rgba(34, 197, 94, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>
+              Recommended
+            </span>
+          </div>
+
+          <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: 0, lineHeight: 1.4 }}>
+            {nativeDesc}
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+            <a
+              href={nativeUrl}
+              download
+              className="btn btn-primary btn-sm"
+              style={{
+                width: '100%', justifyContent: 'center', fontSize: '0.8rem',
+                padding: '8px 14px', textDecoration: 'none'
+              }}
+            >
+              ↓ Download Native Binary ({currentOs === 'windows' ? '.zip' : '.tar.gz'})
+            </a>
+          </div>
+
+          <span style={{ fontSize: '0.68rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
+            {nativeFilename}
+          </span>
+        </div>
+      ) : (
+        /* Classic Tauri Packages */
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center',
+          padding: '10px 12px', background: 'rgba(0, 0, 0, 0.25)',
+          borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '14px'
+        }}>
+          <span style={{ fontSize: '0.74rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>Classic Tauri Installers:</span>
+          {currentOs === 'windows' && (
+            <>
+              <a href={release.classic.win} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+                ↓ Installer (.exe)
+              </a>
+              <span style={{ color: 'var(--line-2)' }}>•</span>
+              <a href={release.classic.winMsi} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+                ↓ MSI (.msi)
+              </a>
+            </>
+          )}
+          {currentOs === 'macos' && (
+            <>
+              <a href={release.classic.macArm} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+                ↓ Apple Silicon (.dmg)
+              </a>
+              <span style={{ color: 'var(--line-2)' }}>•</span>
+              <a href={release.classic.macIntel} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+                ↓ Intel (.dmg)
+              </a>
+            </>
+          )}
+          {currentOs === 'linux' && (
+            <>
+              <a href={release.classic.linux} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+                ↓ AppImage
+              </a>
+              <span style={{ color: 'var(--line-2)' }}>•</span>
+              <a href={release.classic.linuxDeb} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+                ↓ DEB (.deb)
+              </a>
+              <span style={{ color: 'var(--line-2)' }}>•</span>
+              <a href={release.classic.linuxRpm} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+                ↓ RPM (.rpm)
+              </a>
+            </>
+          )}
+          {currentOs === 'macos' && (
+            <div style={{
+              width: '100%', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--line-2)',
+              display: 'flex', flexDirection: 'column', gap: '4px'
+            }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+                💡 If macOS Gatekeeper says "app is damaged", run in Terminal:
+              </span>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'rgba(0, 0, 0, 0.4)', borderRadius: '6px', padding: '4px 8px',
+                border: '1px solid var(--line)'
+              }}>
+                <code style={{ fontSize: '0.72rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                  xattr -cr /Applications/SuperAgent.app
+                </code>
+                <button
+                  type="button"
+                  onClick={() => copy('xattr -cr /Applications/SuperAgent.app')}
+                  style={{
+                    background: 'transparent', border: 'none', color: copied ? 'var(--accent)' : 'var(--muted)',
+                    cursor: 'pointer', fontSize: '0.68rem', fontFamily: 'var(--font-mono)',
+                    padding: '2px 6px', borderRadius: '4px'
+                  }}
+                  title="Copy terminal command"
+                >
+                  {copied ? 'copied ✓' : 'copy'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       
       <p className="dl-all" style={{ marginTop: '0', marginBottom: '16px' }}>
         <a href={release.allReleasesUrl} target="_blank" rel="noopener">All releases &amp; version history →</a>
       </p>
 
       <ul>
-        <li><Check /> Native desktop window with the full workspace client</li>
+        <li><Check /> Platform-native execution with zero webview overhead</li>
         <li><Check /> 3D companion pet that floats and reacts to actions</li>
         <li><Check /> Auto-updates from GitHub Releases via Settings → Updates</li>
       </ul>
