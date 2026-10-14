@@ -168,12 +168,12 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <ComboBox SelectedValue="{x:Bind ViewModel.SelectedModel, Mode=TwoWay}" MinWidth="160">
-                                    <x:String>claude-3-7-sonnet</x:String>
-                                    <x:String>gpt-4o</x:String>
-                                    <x:String>gemini-2.0-flash</x:String>
-                                    <x:String>deepseek-r1</x:String>
-                                    <x:String>ollama:llama3.3</x:String>
+                                <ComboBox MinWidth="160" PlaceholderText="Select Model">
+                                    <ComboBoxItem Content="claude-3-7-sonnet" IsSelected="True" />
+                                    <ComboBoxItem Content="gpt-4o" />
+                                    <ComboBoxItem Content="gemini-2.0-flash" />
+                                    <ComboBoxItem Content="deepseek-r1" />
+                                    <ComboBoxItem Content="ollama:llama3.3" />
                                 </ComboBox>
                             </StackPanel>
                         </Grid>
