@@ -3,14 +3,59 @@
 // SuperAgent
 //
 // Central reactive state store managing sessions, conversation history,
-// streaming thought/token buffers, and daemon lifecycle.
+// streaming thought/token buffers, and all 10 SuperAgent workspaces.
 //
 
 import Foundation
 import Combine
 import SwiftUI
 
-// MARK: - Models
+// MARK: - Core Workspace Enums & Models
+
+public enum WorkspaceCategory: String, CaseIterable, Identifiable {
+    case chat = "chat"
+    case computerUse = "computer_use"
+    case browserLeasing = "browser_leasing"
+    case securityGuardian = "security_guardian"
+    case replConsole = "repl_console"
+    case companion = "companion"
+    case creativeStudio = "creative_studio"
+    case pcbEcad = "pcb_ecad"
+    case tasks = "tasks"
+    case settings = "settings"
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .chat: return "Agent Chat"
+        case .computerUse: return "Computer Use"
+        case .browserLeasing: return "Browser Leasing"
+        case .securityGuardian: return "Security Guardian"
+        case .replConsole: return "REPL Console"
+        case .companion: return "3D Companion"
+        case .creativeStudio: return "Creative Studio"
+        case .pcbEcad: return "PCB & ECAD"
+        case .tasks: return "Tasks & Routines"
+        case .settings: return "Settings & Doctor"
+        }
+    }
+
+    public var systemIcon: String {
+        switch self {
+        case .chat: return "bubble.left.and.bubble.right.fill"
+        case .computerUse: return "display.2"
+        case .browserLeasing: return "globe"
+        case .securityGuardian: return "shield.checkered"
+        case .replConsole: return "terminal.fill"
+        case .companion: return "sparkles.rectangle.stack.fill"
+        case .creativeStudio: return "photo.on.rectangle.angled"
+        case .pcbEcad: return "cpu"
+        case .tasks: return "checklist"
+        case .settings: return "gearshape.2.fill"
+        }
+    }
+}
 
 public struct SessionItem: Identifiable, Codable, Equatable {
     public let id: String
@@ -113,6 +158,10 @@ public struct ChatMessage: Identifiable, Codable, Equatable {
 
 @MainActor
 public final class AppState: ObservableObject {
+    // Active Workspace Navigation
+    @Published public var activeWorkspace: WorkspaceCategory = .chat
+
+    // Chat Sessions & Feed
     @Published public var sessions: [SessionItem] = []
     @Published public var activeSessionId: String? = nil
     @Published public var messages: [String: [ChatMessage]] = [:]
@@ -130,6 +179,63 @@ public final class AppState: ObservableObject {
     @Published public var selectedProvider: String = "openai"
     @Published public var customServerUrl: String = ""
     @Published public var customAuthToken: String = ""
+
+    // MARK: - Computer Use Workspace State
+    @Published public var windows: [WindowItemDemo] = DEMO_WINDOWS
+    @Published public var selectedWindow: WindowItemDemo? = DEMO_WINDOWS.first
+    @Published public var accessibilityTree: AccessibilityNodeDemo = DEMO_ACCESSIBILITY_TREE
+    @Published public var captureMetadata: CaptureFrameMetadataDemo = DEMO_OCCLUDED_CAPTURE
+    @Published public var settlingCountdownMs: Int = 1000
+    @Published public var isSettlingActive: Bool = true
+
+    // MARK: - Browser Leasing Workspace State
+    @Published public var browserTabs: [BrowserTabDemo] = DEMO_CLAIMED_TABS
+    @Published public var activeTab: BrowserTabDemo? = DEMO_CLAIMED_TABS.first
+    @Published public var webMcpTools: [WebMcpToolDemo] = DEMO_WEBMCP_TOOLS
+    @Published public var cdpEvents: [CdpEventDemo] = DEMO_CDP_EVENTS
+    @Published public var inDomBadgeConnected: Bool = true
+
+    // MARK: - Security Guardian Workspace State
+    @Published public var isSecuritySheetPresented: Bool = false
+    @Published public var securityConfirmations: [SecurityConfirmationDemo] = DEMO_SECURITY_CONFIRMATIONS
+    @Published public var activeConfirmation: SecurityConfirmationDemo? = DEMO_SECURITY_CONFIRMATIONS.first
+    @Published public var zoDecisions: [ZoDecisionBadgeDemo] = DEMO_ZO_DECISION_BADGES
+    @Published public var isLockScreenShieldActive: Bool = false
+    @Published public var vaultRecoveryBranches: [String] = DEMO_VAULT_RECOVERY_BRANCHES
+
+    // MARK: - REPL Console Workspace State
+    @Published public var replLines: [String] = DEMO_REPL_LOG_LINES
+    @Published public var replScope: [ReplScopeNodeDemo] = DEMO_REPL_SCOPE
+    @Published public var replPromptInput: String = ""
+    @Published public var replTokenCount: Int = 14280
+    @Published public var replMaxTokens: Int = 25000
+
+    // MARK: - 3D Companion Workspace State
+    @Published public var companionState: CompanionStateDemo = CompanionStateDemo()
+    @Published public var selectedPhotoPreset: String = DEMO_PHOTO_PRESETS[0]
+
+    // MARK: - Creative Studio Workspace State
+    @Published public var imageParams: ImageGenParamsDemo = ImageGenParamsDemo()
+    @Published public var filmstrip: [FilmstripItemDemo] = DEMO_FILMSTRIP_ITEMS
+    @Published public var selectedFilmstripItem: FilmstripItemDemo? = DEMO_FILMSTRIP_ITEMS.first
+    @Published public var videoJob: VideoJobDemo = DEMO_VIDEO_JOB
+    @Published public var isEnhancingPrompt: Bool = false
+
+    // MARK: - PCB & ECAD Workspace State
+    @Published public var pcbComponents: [PcbComponentDemo] = DEMO_PCB_COMPONENTS
+    @Published public var pcbNets: [PcbNetWireDemo] = DEMO_PCB_NETS
+    @Published public var ercRules: [ErcRuleCheckDemo] = DEMO_ERC_RULES
+    @Published public var pcbViewMode: String = "schematic" // "schematic", "layout", "3d"
+    @Published public var hardwareCopilotPrompt: String = ""
+
+    // MARK: - Tasks Workspace State
+    @Published public var kanbanCards: [KanbanCardDemo] = DEMO_KANBAN_CARDS
+    @Published public var routines: [CronRoutineDemo] = DEMO_ROUTINES
+    @Published public var isRoutineModalPresented: Bool = false
+
+    // MARK: - System Doctor & Governance State
+    @Published public var doctorChecks: [DoctorCheckItemDemo] = DEMO_DOCTOR_CHECKS
+    @Published public var isDoctorRunning: Bool = false
 
     public let daemonClient: DaemonClient
     private var cancellables = Set<AnyCancellable>()
@@ -181,7 +287,6 @@ public final class AppState: ObservableObject {
 
     public func createSession(title: String = "New Chat") -> String {
         let newId = "session-\(Int(Date().timeIntervalSince1970 * 1000))"
-        let isFirst = sessions.isEmpty
 
         let item = SessionItem(
             id: newId,
@@ -190,7 +295,6 @@ public final class AppState: ObservableObject {
             isActive: true
         )
 
-        // Mark existing inactive
         for i in 0..<sessions.count {
             sessions[i].isActive = false
         }
@@ -241,6 +345,11 @@ public final class AppState: ObservableObject {
         return messages[activeId] ?? []
     }
 
+    public var currentSessionTitle: String {
+        guard let id = activeSessionId else { return "SuperAgent" }
+        return sessions.first(where: { $0.id == id })?.title ?? "SuperAgent"
+    }
+
     public var filteredSessions: [SessionItem] {
         if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return sessions
@@ -264,7 +373,7 @@ public final class AppState: ObservableObject {
         currentList.append(userMsg)
         messages[sessionId] = currentList
 
-        // Update session timestamp & auto-title if first message
+        // Update session timestamp & auto-title
         if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
             sessions[idx].updatedAt = Date()
             if sessions[idx].title == "New Chat" || sessions[idx].title == "Welcome to SuperAgent" {
@@ -415,5 +524,110 @@ public final class AppState: ObservableObject {
         }
 
         activeToolCall = nil
+    }
+
+    // MARK: - Workspace-Specific Actions
+
+    // Computer Use
+    public func targetWindowForCua(_ window: WindowItemDemo) {
+        selectedWindow = window
+        settlingCountdownMs = 1000
+        isSettlingActive = true
+    }
+
+    // Browser Leasing
+    public func renewTabLease(id: String) {
+        if let idx = browserTabs.firstIndex(where: { $0.id == id }) {
+            browserTabs[idx].remainingSeconds = browserTabs[idx].totalSeconds
+        }
+    }
+
+    public func releaseTabLease(id: String) {
+        browserTabs.removeAll { $0.id == id }
+        if activeTab?.id == id {
+            activeTab = browserTabs.first
+        }
+    }
+
+    // Security Guardian
+    public func approveConfirmation(id: String) {
+        securityConfirmations.removeAll { $0.id == id }
+        activeConfirmation = securityConfirmations.first
+    }
+
+    public func declineConfirmation(id: String) {
+        securityConfirmations.removeAll { $0.id == id }
+        activeConfirmation = securityConfirmations.first
+    }
+
+    // REPL Console
+    public func runReplCommand(_ command: String) {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        replLines.append("> \(trimmed)")
+        replPromptInput = ""
+        // Simulate execution response
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.replLines.append("< \u{001B}[32m[Return] Expression evaluated successfully\u{001B}[0m")
+            self.replTokenCount += 24
+        }
+    }
+
+    public func resetReplSession() {
+        replLines.removeAll()
+        replLines.append("[14:25:00] \u{001B}[33mSession reset (js_reset). V8 context recycled.\u{001B}[0m")
+        replTokenCount = 120
+    }
+
+    // Companion
+    public func setCompanionMood(_ mood: CompanionMoodDemo) {
+        companionState.currentMood = mood
+    }
+
+    public func toggleFloatingPet() {
+        companionState.isFloatingPetActive.toggle()
+    }
+
+    // Creative Studio
+    public func enhanceVideoPrompt() {
+        isEnhancingPrompt = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            self.videoJob = VideoJobDemo(
+                id: "vid-job-\(Int.random(in: 100...999))",
+                prompt: "Cinematic 35mm anamorphic wide shot, high-contrast chiaroscuro lighting, subtle volumetric fog drifting across neon street reflective wet asphalt, 24fps motion blur",
+                engine: "Wan2.1",
+                status: "diffusing",
+                progressPercent: 34
+            )
+            self.isEnhancingPrompt = false
+        }
+    }
+
+    // PCB ECAD
+    public func runErcCheck() {
+        // Trigger verification
+        ercRules = DEMO_ERC_RULES
+    }
+
+    // Tasks
+    public func moveKanbanCard(id: String, toColumn: String) {
+        if let idx = kanbanCards.firstIndex(where: { $0.id == id }) {
+            kanbanCards[idx].column = toColumn
+        }
+    }
+
+    public func toggleRoutine(id: String) {
+        if let idx = routines.firstIndex(where: { $0.id == id }) {
+            routines[idx].isEnabled.toggle()
+        }
+    }
+
+    // System Doctor
+    public func runDoctorDiagnostics() {
+        isDoctorRunning = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            self.doctorChecks = DEMO_DOCTOR_CHECKS
+            self.isDoctorRunning = false
+        }
     }
 }

@@ -2,8 +2,8 @@
 // ContentView.swift
 // SuperAgent
 //
-// Native macOS split view interface with sidebar session management,
-// chat message feed, thought disclosures, and streaming feedback.
+// Native macOS split view interface with sidebar workspace navigation across all 10
+// SuperAgent domains, chat session management, and multi-workspace detail views.
 //
 
 import SwiftUI
@@ -19,84 +19,112 @@ public struct ContentView: View {
         NavigationSplitView {
             sidebarView
         } detail: {
-            detailChatView
+            detailWorkspaceStage
         }
         .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: $appState.isSecuritySheetPresented) {
+            SecurityGuardianSheet()
+        }
         .onAppear {
             appState.start()
         }
     }
 
-    // MARK: - Sidebar View
+    // MARK: - Sidebar View (10 Workspaces + Chat Sessions)
 
     private var sidebarView: some View {
         VStack(spacing: 0) {
-            // New Chat and Search Bar
-            VStack(spacing: 10) {
-                Button {
-                    _ = appState.createSession(title: "New Chat")
-                } label: {
-                    HStack {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundColor(.accentColor)
-                        Text("New Chat")
-                            .fontWeight(.medium)
-                        Spacer()
-                        Text("⌘N")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-
-                // Search field
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
+            // Workspace Selection Navigation
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("WORKSPACES")
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.secondary)
-                        .font(.system(size: 12))
-                    TextField("Search chats...", text: $appState.searchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12))
-                    if !appState.searchText.isEmpty {
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                        .padding(.bottom, 4)
+
+                    ForEach(WorkspaceCategory.allCases) { ws in
+                        workspaceRow(ws)
+                    }
+
+                    // If Chat Workspace is active, show the active chat session controls & list
+                    if appState.activeWorkspace == .chat {
+                        Divider().padding(.vertical, 8)
+
+                        Text("CHAT SESSIONS")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 4)
+
+                        // New Chat Button
                         Button {
-                            appState.searchText = ""
+                            _ = appState.createSession(title: "New Chat")
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 11))
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundColor(.accentColor)
+                                Text("New Chat")
+                                    .fontWeight(.medium)
+                                Spacer()
+                                Text("⌘N")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(6)
                         }
                         .buttonStyle(.plain)
+                        .padding(.horizontal, 10)
+
+                        // Search field
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 11))
+                            TextField("Search chats...", text: $appState.searchText)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 11))
+                            if !appState.searchText.isEmpty {
+                                Button {
+                                    appState.searchText = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                        .font(.system(size: 10))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color(NSColor.controlBackgroundColor).opacity(0.8))
+                        .cornerRadius(6)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 4)
+
+                        // Session Rows
+                        VStack(spacing: 2) {
+                            ForEach(appState.filteredSessions) { session in
+                                sessionItemRow(session)
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            appState.deleteSession(id: session.id)
+                                        } label: {
+                                            Label("Delete Chat", systemImage: "trash")
+                                        }
+                                    }
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.top, 6)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.8))
-                .cornerRadius(6)
+                .padding(.vertical, 6)
             }
-            .padding(12)
-
-            Divider()
-
-            // Session List
-            List(appState.filteredSessions, selection: Binding(
-                get: { appState.activeSessionId },
-                set: { if let id = $0 { appState.selectSession(id: id) } }
-            )) { session in
-                SessionRow(session: session)
-                    .tag(session.id)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            appState.deleteSession(id: session.id)
-                        } label: {
-                            Label("Delete Chat", systemImage: "trash")
-                        }
-                    }
-            }
-            .listStyle(.sidebar)
 
             Divider()
 
@@ -120,6 +148,87 @@ public struct ContentView: View {
         .frame(minWidth: 220, idealWidth: 260)
     }
 
+    private func workspaceRow(_ ws: WorkspaceCategory) -> some View {
+        let isSelected = appState.activeWorkspace == ws
+
+        return Button {
+            appState.activeWorkspace = ws
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: ws.systemIcon)
+                    .font(.system(size: 13))
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .frame(width: 20)
+
+                Text(ws.title)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? .primary : .secondary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+    }
+
+    private func sessionItemRow(_ session: SessionItem) -> some View {
+        let isSelected = appState.activeSessionId == session.id
+
+        return Button {
+            appState.selectSession(id: session.id)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left")
+                    .font(.system(size: 11))
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+
+                Text(session.title)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .lineLimit(1)
+                    .foregroundColor(isSelected ? .primary : .secondary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+            .cornerRadius(5)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Detail Workspace Stage
+
+    @ViewBuilder
+    private var detailWorkspaceStage: some View {
+        switch appState.activeWorkspace {
+        case .chat:
+            detailChatView
+        case .computerUse:
+            ComputerUseView()
+        case .browserLeasing:
+            BrowserLeasingView()
+        case .securityGuardian:
+            SecurityGuardianSheet()
+        case .replConsole:
+            ReplConsoleView()
+        case .companion:
+            CompanionView()
+        case .creativeStudio:
+            CreativeStudioView()
+        case .pcbEcad:
+            PcbEcadView()
+        case .tasks:
+            TasksView()
+        case .settings:
+            SettingsView()
+        }
+    }
+
     // MARK: - Detail Chat Feed View
 
     private var detailChatView: some View {
@@ -127,7 +236,7 @@ public struct ContentView: View {
             // Top Navigation Header
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(currentSessionTitle)
+                    Text(appState.currentSessionTitle)
                         .font(.system(size: 14, weight: .semibold))
                         .lineLimit(1)
                     Text("SuperAgent Core v2 Daemon")
@@ -213,14 +322,6 @@ public struct ContentView: View {
         .background(Color(NSColor.textBackgroundColor))
     }
 
-    private var currentSessionTitle: String {
-        if let activeId = appState.activeSessionId,
-           let session = appState.sessions.first(where: { $0.id == activeId }) {
-            return session.title
-        }
-        return "New Chat"
-    }
-
     private var statusColor: Color {
         switch appState.connectionStatus {
         case .connected: return .green
@@ -231,31 +332,7 @@ public struct ContentView: View {
     }
 }
 
-// MARK: - Subviews
-
-struct SessionRow: View {
-    let session: SessionItem
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .foregroundColor(session.isActive ? .accentColor : .secondary)
-                .font(.system(size: 13))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.title)
-                    .font(.system(size: 12, weight: session.isActive ? .semibold : .regular))
-                    .lineLimit(1)
-                Text(session.updatedAt, style: .time)
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(.vertical, 4)
-    }
-}
+// MARK: - Message Row & Streaming Components
 
 struct MessageRow: View {
     let message: ChatMessage
@@ -433,7 +510,6 @@ struct StreamingAssistantBubble: View {
                         .lineSpacing(4)
                         .textSelection(.enabled)
 
-                    // Pulsing typing cursor
                     Circle()
                         .fill(Color.accentColor)
                         .frame(width: 6, height: 6)

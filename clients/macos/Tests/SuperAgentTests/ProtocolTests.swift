@@ -3,8 +3,8 @@
 // SuperAgentTests
 //
 // XCTest suite testing roundtrip Codable serialization of all AgentStreamEvent
-// variants, WireMessage, IpcRequestEnvelope, and subscription payloads against
-// the exact JSON schema produced by core_v2.
+// variants, WireMessage, IpcRequestEnvelope, and subscription payloads, as well as
+// serialization and mock state transitions across all 10 SuperAgent workspaces and demo datasets.
 //
 
 import XCTest
@@ -258,5 +258,242 @@ final class ProtocolTests: XCTestCase {
 
     func testPortDiscoveryFallback() {
         XCTAssertEqual(DaemonDiscovery.defaultPort, 1469)
+    }
+
+    // MARK: - Workspace Demo Data Serialization Tests
+
+    func testComputerUseDemoDataRoundtrip() throws {
+        // Test Windows list
+        let windowsData = try encoder.encode(DEMO_WINDOWS)
+        let decodedWindows = try decoder.decode([WindowItemDemo].self, from: windowsData)
+        XCTAssertEqual(decodedWindows.count, DEMO_WINDOWS.count)
+        XCTAssertEqual(decodedWindows.first?.hwnd, "0x000A04E2")
+        XCTAssertTrue(decodedWindows.first?.isOccluded ?? false)
+
+        // Test Accessibility Tree with elementIndex 10
+        let axData = try encoder.encode(DEMO_ACCESSIBILITY_TREE)
+        let decodedAx = try decoder.decode(AccessibilityNodeDemo.self, from: axData)
+        XCTAssertEqual(decodedAx.elementIndex, 0)
+        let editorNode = decodedAx.children?.last?.children?.first
+        XCTAssertEqual(editorNode?.elementIndex, 10)
+        XCTAssertEqual(editorNode?.role, "EditField")
+        XCTAssertTrue(editorNode?.isFocused ?? false)
+
+        // Test Occluded Capture Metadata & Trajectory
+        let capData = try encoder.encode(DEMO_OCCLUDED_CAPTURE)
+        let decodedCap = try decoder.decode(CaptureFrameMetadataDemo.self, from: capData)
+        XCTAssertEqual(decodedCap.frameId, 40192)
+        XCTAssertEqual(decodedCap.settlingState.baseDelayMs, 1000)
+        XCTAssertEqual(decodedCap.settlingState.spinnerHoldMs, 1420)
+        XCTAssertEqual(decodedCap.activeTrajectory?.targetElementIndex, 10)
+        XCTAssertEqual(decodedCap.activeTrajectory?.velocityPxPerSec, 1420.0)
+    }
+
+    func testBrowserLeasingDemoDataRoundtrip() throws {
+        let tabsData = try encoder.encode(DEMO_CLAIMED_TABS)
+        let decodedTabs = try decoder.decode([BrowserTabDemo].self, from: tabsData)
+        XCTAssertEqual(decodedTabs.count, 3)
+        XCTAssertEqual(decodedTabs.first?.mentionKey, "@tab-checkout")
+        XCTAssertEqual(decodedTabs.first?.tierType, "claimed_existing")
+
+        let toolsData = try encoder.encode(DEMO_WEBMCP_TOOLS)
+        let decodedTools = try decoder.decode([WebMcpToolDemo].self, from: toolsData)
+        XCTAssertEqual(decodedTools.count, 4)
+        XCTAssertEqual(decodedTools.first?.name, "fill_checkout_form")
+        XCTAssertEqual(decodedTools.first?.avgExecutionMs, 14.2)
+
+        let eventsData = try encoder.encode(DEMO_CDP_EVENTS)
+        let decodedEvents = try decoder.decode([CdpEventDemo].self, from: eventsData)
+        XCTAssertEqual(decodedEvents.count, 5)
+        XCTAssertEqual(decodedEvents.first?.category, "Network")
+    }
+
+    func testSecurityGuardianDemoDataRoundtrip() throws {
+        // Test 4-tier confirmations
+        let confData = try encoder.encode(DEMO_SECURITY_CONFIRMATIONS)
+        let decodedConf = try decoder.decode([SecurityConfirmationDemo].self, from: confData)
+        XCTAssertEqual(decodedConf.count, 2)
+        XCTAssertEqual(decodedConf.first?.tier, .mode2AlwaysConfirm)
+        XCTAssertEqual(decodedConf.last?.tier, .mode1Handoff)
+
+        // Test 16-state zo decision badges
+        let zoData = try encoder.encode(DEMO_ZO_DECISION_BADGES)
+        let decodedZo = try decoder.decode([ZoDecisionBadgeDemo].self, from: zoData)
+        XCTAssertEqual(decodedZo.count, 16)
+        XCTAssertEqual(decodedZo.first?.stateKey, "approval_cancelled")
+        XCTAssertTrue(decodedZo.contains(where: { $0.stateKey == "guardian_denied" && !$0.isRetryable }))
+        XCTAssertTrue(decodedZo.contains(where: { $0.stateKey == "guardian_timed_out" && $0.isRetryable }))
+
+        // Test 7 vault recovery branches
+        XCTAssertEqual(DEMO_VAULT_RECOVERY_BRANCHES.count, 7)
+        XCTAssertTrue(DEMO_VAULT_RECOVERY_BRANCHES.contains("1. retry_after_credential_delivery"))
+        XCTAssertTrue(DEMO_VAULT_RECOVERY_BRANCHES.contains("7. stop"))
+    }
+
+    func testReplConsoleDemoDataRoundtrip() throws {
+        let scopeData = try encoder.encode(DEMO_REPL_SCOPE)
+        let decodedScope = try decoder.decode([ReplScopeNodeDemo].self, from: scopeData)
+        XCTAssertEqual(decodedScope.count, 4)
+        XCTAssertEqual(decodedScope.first?.name, "activeTabs")
+        XCTAssertEqual(decodedScope[1].name, "targetWindow")
+
+        XCTAssertFalse(DEMO_REPL_LOG_LINES.isEmpty)
+        XCTAssertTrue(DEMO_REPL_LOG_LINES.first?.contains("cua_repl") ?? false)
+    }
+
+    func testCompanionDemoDataRoundtrip() throws {
+        let state = CompanionStateDemo(
+            name: "Lumina",
+            currentMood: .joy,
+            affinityLevel: 92,
+            dailyStreakDays: 14,
+            isFloatingPetActive: true
+        )
+        let data = try encoder.encode(state)
+        let decoded = try decoder.decode(CompanionStateDemo.self, from: data)
+        XCTAssertEqual(decoded.name, "Lumina")
+        XCTAssertEqual(decoded.currentMood, .joy)
+        XCTAssertEqual(decoded.affinityLevel, 92)
+        XCTAssertTrue(decoded.isFloatingPetActive)
+
+        XCTAssertEqual(CompanionMoodDemo.allCases.count, 5)
+        XCTAssertEqual(DEMO_PHOTO_PRESETS.count, 4)
+    }
+
+    func testCreativeStudioDemoDataRoundtrip() throws {
+        let imgParams = ImageGenParamsDemo(
+            prompt: "Cyberpunk skyline",
+            aspectRatio: "16:9",
+            steps: 30,
+            cfgScale: 5.0,
+            seed: 12345
+        )
+        let data = try encoder.encode(imgParams)
+        let decoded = try decoder.decode(ImageGenParamsDemo.self, from: data)
+        XCTAssertEqual(decoded.prompt, "Cyberpunk skyline")
+        XCTAssertEqual(decoded.aspectRatio, "16:9")
+        XCTAssertEqual(decoded.steps, 30)
+
+        let filmData = try encoder.encode(DEMO_FILMSTRIP_ITEMS)
+        let decodedFilm = try decoder.decode([FilmstripItemDemo].self, from: filmData)
+        XCTAssertEqual(decodedFilm.count, 3)
+
+        let vidData = try encoder.encode(DEMO_VIDEO_JOB)
+        let decodedVid = try decoder.decode(VideoJobDemo.self, from: vidData)
+        XCTAssertEqual(decodedVid.engine, "Wan2.1")
+        XCTAssertEqual(decodedVid.progressPercent, 88)
+    }
+
+    func testPcbEcadDemoDataRoundtrip() throws {
+        let compData = try encoder.encode(DEMO_PCB_COMPONENTS)
+        let decodedComps = try decoder.decode([PcbComponentDemo].self, from: compData)
+        XCTAssertEqual(decodedComps.count, 5)
+        XCTAssertEqual(decodedComps.first?.designator, "U1")
+
+        let netData = try encoder.encode(DEMO_PCB_NETS)
+        let decodedNets = try decoder.decode([PcbNetWireDemo].self, from: netData)
+        XCTAssertEqual(decodedNets.count, 5)
+        XCTAssertEqual(decodedNets.first?.name, "VBUS_5V")
+
+        let ercData = try encoder.encode(DEMO_ERC_RULES)
+        let decodedErc = try decoder.decode([ErcRuleCheckDemo].self, from: ercData)
+        XCTAssertEqual(decodedErc.count, 5)
+        XCTAssertEqual(decodedErc.first?.code, "missing_decoupling")
+    }
+
+    func testTasksDemoDataRoundtrip() throws {
+        let kanbanData = try encoder.encode(DEMO_KANBAN_CARDS)
+        let decodedCards = try decoder.decode([KanbanCardDemo].self, from: kanbanData)
+        XCTAssertEqual(decodedCards.count, 4)
+        XCTAssertEqual(decodedCards.first?.column, "todo")
+
+        let routineData = try encoder.encode(DEMO_ROUTINES)
+        let decodedRoutines = try decoder.decode([CronRoutineDemo].self, from: routineData)
+        XCTAssertEqual(decodedRoutines.count, 2)
+        XCTAssertEqual(decodedRoutines.first?.cronExpression, "0 9 * * 1-5")
+        XCTAssertTrue(decodedRoutines.first?.notifyTelegram ?? false)
+    }
+
+    func testSystemDoctorDemoDataRoundtrip() throws {
+        let docData = try encoder.encode(DEMO_DOCTOR_CHECKS)
+        let decodedDoc = try decoder.decode([DoctorCheckItemDemo].self, from: docData)
+        XCTAssertEqual(decodedDoc.count, 8)
+        XCTAssertEqual(decodedDoc.first?.component, "Core v2 Daemon")
+        XCTAssertEqual(decodedDoc.first?.status, "healthy")
+    }
+
+    // MARK: - AppState Workspace State Transition Tests
+
+    @MainActor
+    func testAppStateWorkspaceTransitions() {
+        let appState = AppState()
+
+        // Verify initial workspace
+        XCTAssertEqual(appState.activeWorkspace, .chat)
+
+        // Switch across workspaces
+        appState.activeWorkspace = .computerUse
+        XCTAssertEqual(appState.activeWorkspace, .computerUse)
+
+        appState.activeWorkspace = .browserLeasing
+        XCTAssertEqual(appState.activeWorkspace, .browserLeasing)
+
+        appState.activeWorkspace = .securityGuardian
+        XCTAssertEqual(appState.activeWorkspace, .securityGuardian)
+
+        appState.activeWorkspace = .pcbEcad
+        XCTAssertEqual(appState.activeWorkspace, .pcbEcad)
+
+        appState.activeWorkspace = .tasks
+        XCTAssertEqual(appState.activeWorkspace, .tasks)
+    }
+
+    @MainActor
+    func testAppStateActionMutations() {
+        let appState = AppState()
+
+        // 1. Computer Use target window
+        let testWindow = WindowItemDemo(
+            id: "test-win",
+            title: "Test App",
+            appName: "test.exe",
+            pid: 9999,
+            hwnd: "0x1234",
+            bounds: RectDemo(x: 0, y: 0, width: 800, height: 600)
+        )
+        appState.targetWindowForCua(testWindow)
+        XCTAssertEqual(appState.selectedWindow?.id, "test-win")
+        XCTAssertEqual(appState.settlingCountdownMs, 1000)
+
+        // 2. Browser tab lease renewal
+        if let firstTabId = appState.browserTabs.first?.id {
+            appState.renewTabLease(id: firstTabId)
+            XCTAssertEqual(appState.browserTabs.first?.remainingSeconds, 60)
+        }
+
+        // 3. Security confirmation approval
+        let initialConfCount = appState.securityConfirmations.count
+        if let confId = appState.securityConfirmations.first?.id {
+            appState.approveConfirmation(id: confId)
+            XCTAssertEqual(appState.securityConfirmations.count, initialConfCount - 1)
+        }
+
+        // 4. REPL command execution & reset
+        appState.runReplCommand("console.log('hello');")
+        XCTAssertTrue(appState.replLines.contains("> console.log('hello');"))
+
+        appState.resetReplSession()
+        XCTAssertTrue(appState.replLines.first?.contains("js_reset") ?? false)
+        XCTAssertEqual(appState.replTokenCount, 120)
+
+        // 5. Kanban card movement
+        if let firstCardId = appState.kanbanCards.first?.id {
+            appState.moveKanbanCard(id: firstCardId, toColumn: "done")
+            XCTAssertEqual(appState.kanbanCards.first?.column, "done")
+        }
+
+        // 6. Companion mood change
+        appState.setCompanionMood(.joy)
+        XCTAssertEqual(appState.companionState.currentMood, .joy)
     }
 }
