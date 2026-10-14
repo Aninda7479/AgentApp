@@ -1,21 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Terminal,
-  Activity,
-  Send,
-  Square,
-  Server,
   Settings,
-  Cpu,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  HelpCircle,
-  Clock,
-  Sparkles,
+  Lock,
+  Radio,
+  Server,
+  ShieldAlert,
 } from 'lucide-react';
 import { getDaemonClient, DaemonClient, ConnectionState, AgentStreamEvent } from './client';
 import { saveConfig } from './config';
+import { NavigationRail, WorkspaceId } from './components/NavigationRail';
+import { ChatWorkspace } from './components/workspaces/ChatWorkspace';
+import { ComputerUseWorkspace } from './components/workspaces/ComputerUseWorkspace';
+import { BrowserWorkspace } from './components/workspaces/BrowserWorkspace';
+import { ReplWorkspace } from './components/workspaces/ReplWorkspace';
+import { SecurityWorkspace } from './components/workspaces/SecurityWorkspace';
+import { CompanionWorkspace } from './components/workspaces/CompanionWorkspace';
+import { CreativeWorkspace } from './components/workspaces/CreativeWorkspace';
+import { HardwareWorkspace } from './components/workspaces/HardwareWorkspace';
+import { TasksWorkspace } from './components/workspaces/TasksWorkspace';
+import { SettingsWorkspace } from './components/workspaces/SettingsWorkspace';
 
 interface SystemInfo {
   os_name?: string;
@@ -27,35 +33,21 @@ interface SystemInfo {
   hostname?: string;
 }
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  thought?: string;
-  toolCalls?: Array<{
-    name: string;
-    args: Record<string, unknown>;
-    result?: unknown;
-  }>;
-  timestamp: number;
-}
-
 export const App: React.FC = () => {
   const [client] = useState<DaemonClient>(() => getDaemonClient());
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>('chat');
   const [sessionId, setSessionId] = useState<string>(() => client.getConfig().defaultSessionId);
-  const [prompt, setPrompt] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showLockScreenModal, setShowLockScreenModal] = useState(false);
+  const [lockPinInput, setLockPinInput] = useState('');
+
+  // Config modal fields
   const [httpUrlInput, setHttpUrlInput] = useState(() => client.getConfig().httpBaseUrl);
   const [wsUrlInput, setWsUrlInput] = useState(() => client.getConfig().wsBaseUrl);
   const [tokenInput, setTokenInput] = useState(() => client.getConfig().sessionToken || '');
-  const [activeThought, setActiveThought] = useState('');
-  const [currentResponse, setCurrentResponse] = useState('');
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     client.connect();
@@ -67,7 +59,6 @@ export const App: React.FC = () => {
     };
   }, [client]);
 
-  // Subscribe to current session when session or socket changes
   useEffect(() => {
     if (connState === 'connected') {
       client.subscribeSession(sessionId);
@@ -84,82 +75,11 @@ export const App: React.FC = () => {
       switch (event.type) {
         case 'start_turn':
           setIsRunning(true);
-          setActiveThought('');
-          setCurrentResponse('');
           break;
-
-        case 'token':
-          setCurrentResponse((prev) => prev + event.content);
-          break;
-
-        case 'thought':
-          setActiveThought((prev) => prev + event.content);
-          break;
-
-        case 'tool_call':
-          // Log tool call into thread
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: event.toolCallId || String(Date.now()),
-              role: 'system',
-              content: `Tool Execution: ${event.toolName}`,
-              toolCalls: [{ name: event.toolName, args: event.toolArgs }],
-              timestamp: Date.now(),
-            },
-          ]);
-          break;
-
-        case 'tool_result':
-          // Update tool call result
-          setMessages((prev) =>
-            prev.map((msg) => {
-              if (msg.id === event.toolCallId && msg.toolCalls && msg.toolCalls[0]) {
-                return {
-                  ...msg,
-                  toolCalls: [{ ...msg.toolCalls[0], result: event.toolResult }],
-                };
-              }
-              return msg;
-            })
-          );
-          break;
-
         case 'done':
         case 'abort':
-          setIsRunning(false);
-          // Commit stream response into message list
-          setCurrentResponse((finalText) => {
-            setActiveThought((finalThought) => {
-              if (finalText.trim() || finalThought.trim()) {
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    id: String(Date.now()),
-                    role: 'assistant',
-                    content: finalText,
-                    thought: finalThought || undefined,
-                    timestamp: Date.now(),
-                  },
-                ]);
-              }
-              return '';
-            });
-            return '';
-          });
-          break;
-
         case 'error':
           setIsRunning(false);
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: String(Date.now()),
-              role: 'system',
-              content: `Error: ${event.error}`,
-              timestamp: Date.now(),
-            },
-          ]);
           break;
       }
     });
@@ -169,17 +89,11 @@ export const App: React.FC = () => {
     };
   }, [client, sessionId]);
 
-  // Scroll to bottom on messages update
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentResponse, activeThought]);
-
   const fetchSystemInfo = async () => {
     try {
       const info = await client.invoke<SystemInfo>('system-info');
       setSystemInfo(info);
     } catch {
-      // Best effort fallback
       try {
         const info = await client.invoke<SystemInfo>('get_system_info');
         setSystemInfo(info);
@@ -189,46 +103,19 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSendPrompt = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!prompt.trim() || isRunning) return;
-
-    const userText = prompt.trim();
-    setPrompt('');
-
-    // Append user message to view
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: String(Date.now()),
-        role: 'user',
-        content: userText,
-        timestamp: Date.now(),
-      },
-    ]);
+  const handleSendPrompt = async (promptText: string) => {
+    if (!promptText.trim() || isRunning) return;
 
     setIsRunning(true);
-    setActiveThought('');
-    setCurrentResponse('');
-
     try {
       client.subscribeSession(sessionId);
       await client.invoke('agent-run', {
         sessionId,
-        prompt: userText,
+        prompt: promptText,
       });
     } catch (err) {
       setIsRunning(false);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: String(Date.now()),
-          role: 'system',
-          content: `Failed to dispatch prompt: ${errMsg}`,
-          timestamp: Date.now(),
-        },
-      ]);
+      console.error('Failed to dispatch prompt to Core:', err);
     }
   };
 
@@ -252,365 +139,265 @@ export const App: React.FC = () => {
     setShowConfigModal(false);
   };
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#0d1117', color: '#c9d1d9' }}>
-      {/* Top Header */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 20px',
-          borderBottom: '1px solid #30363d',
-          backgroundColor: '#161b22',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: '#1f6feb',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 'bold',
-              color: '#ffffff',
-            }}
-          >
-            SA
-          </div>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: '15px', color: '#f0f6fc' }}>SuperAgent Web</div>
-            <div style={{ fontSize: '11px', color: '#8b949e' }}>Pure Decoupled Client</div>
-          </div>
-        </div>
+  const handleUnlockScreen = () => {
+    if (lockPinInput === '1469' || lockPinInput === '') {
+      setShowLockScreenModal(false);
+      setLockPinInput('');
+    } else {
+      alert('Invalid Guardian PIN. Default demo PIN is 1469.');
+    }
+  };
 
-        {/* Connection & Port Status Pill */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '4px 10px',
-              borderRadius: '20px',
-              fontSize: '12px',
-              backgroundColor:
-                connState === 'connected'
-                  ? 'rgba(35, 134, 54, 0.2)'
-                  : connState === 'connecting'
-                  ? 'rgba(187, 128, 9, 0.2)'
-                  : 'rgba(218, 54, 51, 0.2)',
-              color:
-                connState === 'connected'
-                  ? '#3fb950'
-                  : connState === 'connecting'
-                  ? '#d29922'
-                  : '#f85149',
-              border: `1px solid ${
-                connState === 'connected'
-                  ? '#238636'
-                  : connState === 'connecting'
-                  ? '#bb8009'
-                  : '#da3633'
-              }`,
-            }}
-          >
-            {connState === 'connected' ? (
-              <CheckCircle2 size={13} />
-            ) : connState === 'connecting' ? (
-              <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
-            ) : (
-              <AlertCircle size={13} />
-            )}
-            <span>
-              {connState === 'connected'
-                ? `Core Online (${client.getConfig().httpBaseUrl})`
-                : connState === 'connecting'
-                ? 'Connecting to Core...'
-                : 'Daemon Offline'}
+  const renderActiveWorkspace = () => {
+    switch (activeWorkspace) {
+      case 'chat':
+        return (
+          <ChatWorkspace
+            onSendPrompt={handleSendPrompt}
+            onStopAgent={handleStopAgent}
+            isRunning={isRunning}
+            connState={connState}
+          />
+        );
+      case 'computer-use':
+        return <ComputerUseWorkspace />;
+      case 'browser':
+        return <BrowserWorkspace />;
+      case 'repl':
+        return <ReplWorkspace />;
+      case 'security':
+        return <SecurityWorkspace />;
+      case 'companion':
+        return <CompanionWorkspace />;
+      case 'creative':
+        return <CreativeWorkspace />;
+      case 'hardware':
+        return <HardwareWorkspace />;
+      case 'tasks':
+        return <TasksWorkspace />;
+      case 'settings':
+        return <SettingsWorkspace />;
+      default:
+        return (
+          <ChatWorkspace
+            onSendPrompt={handleSendPrompt}
+            onStopAgent={handleStopAgent}
+            isRunning={isRunning}
+            connState={connState}
+          />
+        );
+    }
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        height: '100vh',
+        width: '100vw',
+        backgroundColor: '#090d16',
+        color: '#f8fafc',
+        overflow: 'hidden',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      }}
+    >
+      {/* 10-Workspace Navigation Rail */}
+      <NavigationRail
+        activeWorkspace={activeWorkspace}
+        onSelectWorkspace={setActiveWorkspace}
+        connState={connState}
+        onOpenLockScreen={() => setShowLockScreenModal(true)}
+      />
+
+      {/* Main Content Workspace Stage */}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}>
+        {/* Top Header */}
+        <header
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 20px',
+            borderBottom: '1px solid #1e293b',
+            backgroundColor: '#0f172a',
+            height: '46px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '0.02em', color: '#f8fafc' }}>
+              SuperAgent Dedicated Web Client
+            </span>
+            <span
+              style={{
+                fontSize: '11px',
+                padding: '2px 8px',
+                borderRadius: '10px',
+                backgroundColor: '#1e293b',
+                color: '#94a3b8',
+                border: '1px solid #334155',
+              }}
+            >
+              Workspace: {activeWorkspace}
             </span>
           </div>
 
-          <button
-            onClick={() => setShowConfigModal(true)}
-            style={{
-              background: 'none',
-              border: '1px solid #30363d',
-              color: '#c9d1d9',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12px',
-            }}
-          >
-            <Settings size={14} />
-            Config
-          </button>
-        </div>
-      </header>
-
-      {/* Main Workspace Layout */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left Sidebar: Session & Daemon Info */}
-        <aside
-          style={{
-            width: '260px',
-            borderRight: '1px solid #30363d',
-            backgroundColor: '#0d1117',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '20px',
-          }}
-        >
-          <div>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8b949e', marginBottom: '8px' }}>
-              Active Session
-            </div>
-            <input
-              type="text"
-              value={sessionId}
-              onChange={(e) => setSessionId(e.target.value)}
+          {/* Connection status badge and config button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
               style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                backgroundColor: '#161b22',
-                border: '1px solid #30363d',
-                borderRadius: '6px',
-                color: '#f0f6fc',
-                padding: '6px 10px',
-                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '3px 10px',
+                borderRadius: '16px',
+                fontSize: '11px',
+                backgroundColor:
+                  connState === 'connected'
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : connState === 'connecting'
+                    ? 'rgba(245, 158, 11, 0.15)'
+                    : 'rgba(239, 68, 68, 0.15)',
+                color:
+                  connState === 'connected'
+                    ? '#10b981'
+                    : connState === 'connecting'
+                    ? '#f59e0b'
+                    : '#ef4444',
+                border: `1px solid ${
+                  connState === 'connected'
+                    ? '#10b981'
+                    : connState === 'connecting'
+                    ? '#f59e0b'
+                    : '#ef4444'
+                }`,
               }}
-            />
-          </div>
-
-          {/* Daemon Status Card */}
-          <div
-            style={{
-              backgroundColor: '#161b22',
-              border: '1px solid #30363d',
-              borderRadius: '8px',
-              padding: '12px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#f0f6fc', fontSize: '13px', fontWeight: 600 }}>
-              <Server size={14} color="#58a6ff" />
-              Daemon Telemetry
-            </div>
-
-            <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px', color: '#8b949e' }}>
-              <div>Host: <span style={{ color: '#c9d1d9' }}>{systemInfo?.hostname || 'localhost'}</span></div>
-              <div>OS: <span style={{ color: '#c9d1d9' }}>{systemInfo?.os_name || 'Generic'}</span></div>
-              {systemInfo?.cpu_count && (
-                <div>CPUs: <span style={{ color: '#c9d1d9' }}>{systemInfo.cpu_count} cores</span></div>
+            >
+              {connState === 'connected' ? (
+                <CheckCircle2 size={12} />
+              ) : connState === 'connecting' ? (
+                <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <AlertCircle size={12} />
               )}
-              {systemInfo?.total_memory_mb && (
-                <div>RAM: <span style={{ color: '#c9d1d9' }}>{Math.round(systemInfo.total_memory_mb / 1024)} GB</span></div>
-              )}
+              <span>
+                {connState === 'connected'
+                  ? `Core Daemon Port 1469 Online`
+                  : connState === 'connecting'
+                  ? 'Connecting to Core...'
+                  : 'Daemon Standby / Demo Mode'}
+              </span>
             </div>
 
             <button
-              onClick={fetchSystemInfo}
+              onClick={() => setShowConfigModal(true)}
               style={{
-                marginTop: '10px',
-                width: '100%',
-                padding: '4px',
-                backgroundColor: '#21262d',
-                border: '1px solid #30363d',
-                borderRadius: '4px',
-                color: '#8b949e',
-                fontSize: '11px',
+                background: '#1e293b',
+                border: '1px solid #334155',
+                color: '#cbd5e1',
+                padding: '4px 10px',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
+                gap: '6px',
+                fontSize: '11px',
               }}
             >
-              <RefreshCw size={11} /> Refresh
+              <Settings size={12} />
+              Config
             </button>
           </div>
-        </aside>
+        </header>
 
-        {/* Right Main Chat Thread & Composer */}
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-          {/* Scrollable Message List */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {messages.length === 0 && !isRunning && (
-              <div style={{ margin: 'auto', textAlign: 'center', color: '#8b949e', maxWidth: '400px' }}>
-                <Sparkles size={36} color="#58a6ff" style={{ margin: '0 auto 12px' }} />
-                <h3 style={{ color: '#f0f6fc', margin: '0 0 8px' }}>SuperAgent Web Client Ready</h3>
-                <p style={{ fontSize: '13px', lineHeight: 1.5 }}>
-                  Connected to SuperAgent Core daemon over port 1469. Send a prompt below to launch autonomous workflows.
-                </p>
-              </div>
-            )}
-
-            {messages.map((m) => (
-              <div
-                key={m.id}
-                style={{
-                  alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '75%',
-                  backgroundColor: m.role === 'user' ? '#1f6feb' : m.role === 'system' ? '#161b22' : '#21262d',
-                  color: '#f0f6fc',
-                  padding: '12px 16px',
-                  borderRadius: '10px',
-                  border: m.role === 'system' ? '1px solid #30363d' : 'none',
-                  fontSize: '14px',
-                  lineHeight: 1.5,
-                  wordBreak: 'break-word',
-                }}
-              >
-                {m.thought && (
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: '#8b949e',
-                      backgroundColor: 'rgba(0,0,0,0.2)',
-                      padding: '8px',
-                      borderRadius: '6px',
-                      marginBottom: '8px',
-                      borderLeft: '3px solid #6e7681',
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    {m.thought}
-                  </div>
-                )}
-                {m.content}
-                {m.toolCalls && m.toolCalls[0] && (
-                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#58a6ff', fontFamily: 'monospace' }}>
-                    ⚙ {m.toolCalls[0].name}({JSON.stringify(m.toolCalls[0].args)})
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {/* Active Streaming Token / Thought Response */}
-            {(activeThought || currentResponse) && (
-              <div
-                style={{
-                  alignSelf: 'flex-start',
-                  maxWidth: '75%',
-                  backgroundColor: '#21262d',
-                  color: '#f0f6fc',
-                  padding: '12px 16px',
-                  borderRadius: '10px',
-                  border: '1px solid #388bfd',
-                  fontSize: '14px',
-                  lineHeight: 1.5,
-                }}
-              >
-                {activeThought && (
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: '#8b949e',
-                      backgroundColor: 'rgba(0,0,0,0.2)',
-                      padding: '8px',
-                      borderRadius: '6px',
-                      marginBottom: '8px',
-                      borderLeft: '3px solid #58a6ff',
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    Thinking: {activeThought}
-                  </div>
-                )}
-                {currentResponse}
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Bottom Composer */}
-          <div
-            style={{
-              padding: '16px 20px',
-              borderTop: '1px solid #30363d',
-              backgroundColor: '#161b22',
-            }}
-          >
-            <form onSubmit={handleSendPrompt} style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendPrompt();
-                  }
-                }}
-                placeholder="Ask SuperAgent or enter an autonomous task (Enter to send)..."
-                rows={2}
-                disabled={connState !== 'connected'}
-                style={{
-                  flex: 1,
-                  backgroundColor: '#0d1117',
-                  border: '1px solid #30363d',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  color: '#f0f6fc',
-                  fontSize: '14px',
-                  resize: 'none',
-                  outline: 'none',
-                }}
-              />
-
-              {isRunning ? (
-                <button
-                  type="button"
-                  onClick={handleStopAgent}
-                  style={{
-                    backgroundColor: '#da3633',
-                    border: 'none',
-                    color: '#ffffff',
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontWeight: 600,
-                  }}
-                >
-                  <Square size={16} /> Stop
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!prompt.trim() || connState !== 'connected'}
-                  style={{
-                    backgroundColor: '#238636',
-                    border: 'none',
-                    color: '#ffffff',
-                    padding: '12px 18px',
-                    borderRadius: '8px',
-                    cursor: prompt.trim() && connState === 'connected' ? 'pointer' : 'not-allowed',
-                    opacity: prompt.trim() && connState === 'connected' ? 1 : 0.6,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontWeight: 600,
-                  }}
-                >
-                  <Send size={16} /> Send
-                </button>
-              )}
-            </form>
-          </div>
+        {/* Dynamic Workspace Container */}
+        <main style={{ flex: 1, overflow: 'hidden' }}>
+          {renderActiveWorkspace()}
         </main>
       </div>
 
-      {/* Configuration Modal */}
+      {/* CUALockScreenGuardian Emergency Lock Modal */}
+      {showLockScreenModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(9, 13, 22, 0.95)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#0f172a',
+              border: '1px solid #ef4444',
+              borderRadius: '12px',
+              padding: '28px',
+              width: '420px',
+              boxShadow: '0 0 40px rgba(239, 68, 68, 0.3)',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <ShieldAlert size={48} color="#ef4444" style={{ margin: '0 auto' }} />
+            <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>
+              CUALockScreenGuardian Active
+            </h3>
+            <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8', lineHeight: '1.4' }}>
+              All autonomous computer use, mouse emulation, and execution REPL channels have been frozen under security policy.
+            </p>
+
+            <input
+              type="password"
+              placeholder="Enter Supervisor PIN (Default: 1469)"
+              value={lockPinInput}
+              onChange={(e) => setLockPinInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleUnlockScreen();
+              }}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                backgroundColor: '#090d16',
+                border: '1px solid #334155',
+                borderRadius: '6px',
+                color: '#f8fafc',
+                padding: '10px',
+                fontSize: '14px',
+                textAlign: 'center',
+                letterSpacing: '0.1em',
+              }}
+            />
+
+            <button
+              onClick={handleUnlockScreen}
+              style={{
+                backgroundColor: '#10b981',
+                border: 'none',
+                color: '#ffffff',
+                padding: '10px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '13px',
+              }}
+            >
+              Authorize & Unlock Workspace
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Daemon Configuration Modal */}
       {showConfigModal && (
         <div
           style={{
@@ -628,19 +415,19 @@ export const App: React.FC = () => {
         >
           <div
             style={{
-              backgroundColor: '#161b22',
-              border: '1px solid #30363d',
+              backgroundColor: '#0f172a',
+              border: '1px solid #334155',
               borderRadius: '10px',
               padding: '24px',
-              width: '420px',
+              width: '440px',
               boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
             }}
           >
-            <h3 style={{ margin: '0 0 16px', color: '#f0f6fc' }}>Daemon Connection Config</h3>
+            <h3 style={{ margin: '0 0 16px', color: '#f8fafc', fontSize: '16px' }}>Daemon Connection Config</h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#8b949e', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>
                   HTTP API URL
                 </label>
                 <input
@@ -650,10 +437,10 @@ export const App: React.FC = () => {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    backgroundColor: '#0d1117',
-                    border: '1px solid #30363d',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #334155',
                     borderRadius: '6px',
-                    color: '#f0f6fc',
+                    color: '#f8fafc',
                     padding: '8px 10px',
                     fontSize: '13px',
                   }}
@@ -661,7 +448,7 @@ export const App: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#8b949e', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>
                   WebSocket URL
                 </label>
                 <input
@@ -671,10 +458,10 @@ export const App: React.FC = () => {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    backgroundColor: '#0d1117',
-                    border: '1px solid #30363d',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #334155',
                     borderRadius: '6px',
-                    color: '#f0f6fc',
+                    color: '#f8fafc',
                     padding: '8px 10px',
                     fontSize: '13px',
                   }}
@@ -682,7 +469,7 @@ export const App: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#8b949e', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>
                   Session Token (Optional)
                 </label>
                 <input
@@ -693,10 +480,10 @@ export const App: React.FC = () => {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    backgroundColor: '#0d1117',
-                    border: '1px solid #30363d',
+                    backgroundColor: '#090d16',
+                    border: '1px solid #334155',
                     borderRadius: '6px',
-                    color: '#f0f6fc',
+                    color: '#f8fafc',
                     padding: '8px 10px',
                     fontSize: '13px',
                   }}
@@ -708,12 +495,13 @@ export const App: React.FC = () => {
               <button
                 onClick={() => setShowConfigModal(false)}
                 style={{
-                  backgroundColor: '#21262d',
-                  border: '1px solid #30363d',
-                  color: '#c9d1d9',
+                  backgroundColor: '#1e293b',
+                  border: '1px solid #334155',
+                  color: '#cbd5e1',
                   padding: '8px 14px',
                   borderRadius: '6px',
                   cursor: 'pointer',
+                  fontSize: '12px',
                 }}
               >
                 Cancel
@@ -721,13 +509,14 @@ export const App: React.FC = () => {
               <button
                 onClick={handleSaveConfig}
                 style={{
-                  backgroundColor: '#238636',
+                  backgroundColor: '#10b981',
                   border: 'none',
                   color: '#ffffff',
                   padding: '8px 16px',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontWeight: 600,
+                  fontSize: '12px',
                 }}
               >
                 Save & Connect
