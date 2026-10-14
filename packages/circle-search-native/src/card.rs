@@ -3,9 +3,59 @@ use egui::{
 };
 
 use crate::theme::{
-    self, COLOR_ACCENT_CYAN, COLOR_ACCENT_TERRACOTTA, COLOR_BORDER_SUBTLE, COLOR_STATUS_CRIMSON,
-    COLOR_TEXT_DIM, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED,
+    self, COLOR_ACCENT_CYAN, COLOR_ACCENT_TERRACOTTA, COLOR_BORDER_CARD, COLOR_BORDER_SUBTLE,
+    COLOR_STATUS_CRIMSON, COLOR_TEXT_DIM, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED,
 };
+
+fn action_button(text: &str, is_primary: bool) -> egui::Button<'_> {
+    let (bg, text_color, border_color) = if is_primary {
+        (
+            COLOR_ACCENT_TERRACOTTA,
+            Color32::WHITE,
+            Color32::from_rgba_unmultiplied(255, 255, 255, 50),
+        )
+    } else {
+        (
+            theme::COLOR_BG_BTN,
+            COLOR_TEXT_MAIN,
+            theme::COLOR_BORDER_SUBTLE,
+        )
+    };
+
+    egui::Button::new(egui::RichText::new(text).size(11.0).color(text_color))
+        .fill(bg)
+        .stroke(Stroke::new(1.0, border_color))
+        .rounding(Rounding::same(8.0))
+}
+
+fn render_styled_text_chunk(ui: &mut egui::Ui, text: &str) {
+    let parts: Vec<&str> = text.split("**").collect();
+    for (idx, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        let is_bold = idx % 2 == 1;
+        if is_bold {
+            let color = if part.ends_with(':') {
+                COLOR_ACCENT_TERRACOTTA
+            } else {
+                COLOR_TEXT_MAIN
+            };
+            ui.label(
+                egui::RichText::new(*part)
+                    .font(FontId::proportional(12.5))
+                    .strong()
+                    .color(color),
+            );
+        } else {
+            ui.label(
+                egui::RichText::new(*part)
+                    .font(FontId::proportional(12.5))
+                    .color(COLOR_TEXT_MUTED),
+            );
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ActiveTab {
@@ -53,7 +103,7 @@ pub fn render_hero_card(
         || render_ctx.is_loading
         || render_ctx.error_msg.is_some();
 
-    let card_w = if is_expanded { 520.0f32 } else { 450.0f32 };
+    let card_w = if is_expanded { 580.0f32 } else { 460.0f32 };
     let default_pos = if is_expanded {
         Pos2::new((screen_rect.max.x - card_w - 32.0).max(20.0), 36.0)
     } else {
@@ -162,35 +212,24 @@ pub fn render_hero_card(
                                 if *render_ctx.is_fullscreen_mode {
                                     Color32::WHITE
                                 } else {
-                                    COLOR_TEXT_MUTED
+                                    COLOR_TEXT_MAIN
                                 },
                             ),
                         )
                         .fill(if *render_ctx.is_fullscreen_mode {
                             COLOR_ACCENT_TERRACOTTA
                         } else {
-                            COLOR_BORDER_SUBTLE
+                            theme::COLOR_BG_BTN
                         })
-                        .rounding(Rounding::same(10.0));
+                        .stroke(Stroke::new(1.0, theme::COLOR_BORDER_SUBTLE))
+                        .rounding(Rounding::same(8.0));
 
                         if ui.add(share_btn).clicked() {
                             *render_ctx.is_fullscreen_mode = !*render_ctx.is_fullscreen_mode;
                         }
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let lens_btn = egui::Button::new(
-                                egui::RichText::new("✦ Visual Lens")
-                                    .size(11.5)
-                                    .strong()
-                                    .color(Color32::WHITE),
-                            )
-                            .fill(COLOR_ACCENT_TERRACOTTA)
-                            .rounding(Rounding::same(10.0))
-                            .stroke(Stroke::new(
-                                1.0,
-                                Color32::from_rgba_unmultiplied(255, 255, 255, 40),
-                            ));
-
+                            let lens_btn = action_button("✦ Visual Lens", true);
                             if ui.add(lens_btn).clicked() {
                                 *render_ctx.is_lens_active = true;
                             }
@@ -239,11 +278,7 @@ pub fn render_hero_card(
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let close_btn = egui::Button::new(
-                            egui::RichText::new("✕").size(11.0).color(COLOR_TEXT_MUTED),
-                        )
-                        .fill(COLOR_BORDER_SUBTLE)
-                        .rounding(Rounding::same(8.0));
+                        let close_btn = action_button("✕", false);
                         if ui.add(close_btn).clicked() {
                             pending_action = Some(CardAction::Close);
                         }
@@ -256,11 +291,7 @@ pub fn render_hero_card(
                             } else {
                                 "📋 Text"
                             };
-                            let copy_btn = egui::Button::new(
-                                egui::RichText::new(label).size(11.0).color(COLOR_TEXT_MAIN),
-                            )
-                            .fill(COLOR_BORDER_SUBTLE)
-                            .rounding(Rounding::same(8.0));
+                            let copy_btn = action_button(label, false);
                             if ui.add(copy_btn).clicked() {
                                 if let Some(ref text) = render_ctx.ai_response {
                                     pending_action = Some(CardAction::CopyText(text.clone()));
@@ -276,22 +307,12 @@ pub fn render_hero_card(
                             } else {
                                 "📷 Image"
                             };
-                            let copy_img_btn = egui::Button::new(
-                                egui::RichText::new(label).size(11.0).color(COLOR_TEXT_MAIN),
-                            )
-                            .fill(COLOR_BORDER_SUBTLE)
-                            .rounding(Rounding::same(8.0));
+                            let copy_img_btn = action_button(label, false);
                             if ui.add(copy_img_btn).clicked() {
                                 pending_action = Some(CardAction::CopyImage);
                             }
 
-                            let redraw_btn = egui::Button::new(
-                                egui::RichText::new("🔄 Redraw")
-                                    .size(11.0)
-                                    .color(COLOR_TEXT_MUTED),
-                            )
-                            .fill(COLOR_BORDER_SUBTLE)
-                            .rounding(Rounding::same(8.0));
+                            let redraw_btn = action_button("🔄 Redraw", false);
                             if ui.add(redraw_btn).clicked() {
                                 pending_action = Some(CardAction::Redraw);
                             }
@@ -305,7 +326,7 @@ pub fn render_hero_card(
 
                 // Content Area with insights & thumbnail
                 ScrollArea::vertical()
-                    .max_height(320.0)
+                    .max_height(360.0)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.horizontal_top(|ui| {
@@ -313,7 +334,7 @@ pub fn render_hero_card(
                                 ui.set_width(
                                     ui.available_width()
                                         - if render_ctx.crop_texture.is_some() {
-                                            125.0
+                                            105.0
                                         } else {
                                             0.0
                                         },
@@ -366,23 +387,20 @@ pub fn render_hero_card(
                                             || trimmed.starts_with("* ")
                                         {
                                             let bullet_text = &trimmed[2..];
-                                            ui.horizontal_top(|ui| {
+                                            ui.horizontal_wrapped(|ui| {
+                                                ui.spacing_mut().item_spacing = vec2(3.0, 2.0);
                                                 ui.label(
                                                     egui::RichText::new("•")
+                                                        .font(FontId::proportional(12.0))
                                                         .color(COLOR_ACCENT_TERRACOTTA),
                                                 );
-                                                ui.label(
-                                                    egui::RichText::new(bullet_text)
-                                                        .font(FontId::proportional(12.0))
-                                                        .color(COLOR_TEXT_MAIN),
-                                                );
+                                                render_styled_text_chunk(ui, bullet_text);
                                             });
                                         } else {
-                                            ui.label(
-                                                egui::RichText::new(trimmed)
-                                                    .font(FontId::proportional(12.5))
-                                                    .color(COLOR_TEXT_MUTED),
-                                            );
+                                            ui.horizontal_wrapped(|ui| {
+                                                ui.spacing_mut().item_spacing = vec2(3.0, 2.0);
+                                                render_styled_text_chunk(ui, trimmed);
+                                            });
                                         }
                                     }
                                 }
@@ -397,10 +415,10 @@ pub fn render_hero_card(
                                 }
                             });
 
-                            // Upper-Right Cropped Selection Thumbnail
+                            // Upper-Right Cropped Selection Thumbnail (compact badge)
                             if let Some(ref crop_tex) = render_ctx.crop_texture {
-                                let (rect, response) = ui
-                                    .allocate_exact_size(vec2(115.0, 130.0), egui::Sense::click());
+                                let (rect, response) =
+                                    ui.allocate_exact_size(vec2(95.0, 75.0), egui::Sense::click());
 
                                 ui.painter().image(
                                     crop_tex.id(),
@@ -410,20 +428,20 @@ pub fn render_hero_card(
                                 );
                                 ui.painter().rect_stroke(
                                     rect,
-                                    Rounding::same(10.0),
-                                    Stroke::new(1.0, COLOR_BORDER_SUBTLE),
+                                    Rounding::same(8.0),
+                                    Stroke::new(1.0, COLOR_BORDER_CARD),
                                 );
 
                                 if response.hovered() {
                                     ui.painter().rect_filled(
                                         rect,
-                                        Rounding::same(10.0),
-                                        Color32::from_rgba_unmultiplied(0, 0, 0, 140),
+                                        Rounding::same(8.0),
+                                        Color32::from_rgba_unmultiplied(0, 0, 0, 160),
                                     );
                                     ui.painter().text(
                                         rect.center(),
                                         Align2::CENTER_CENTER,
-                                        "📷 Copy Image",
+                                        "📷 Copy",
                                         FontId::proportional(11.0),
                                         Color32::WHITE,
                                     );
@@ -464,13 +482,7 @@ pub fn render_hero_card(
                         );
 
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let lens_btn = egui::Button::new(
-                                egui::RichText::new("✦ Recapture")
-                                    .size(11.0)
-                                    .color(COLOR_TEXT_MAIN),
-                            )
-                            .fill(COLOR_BORDER_SUBTLE)
-                            .rounding(Rounding::same(8.0));
+                            let lens_btn = action_button("✦ Recapture", false);
 
                             if ui.add(lens_btn).clicked() {
                                 *render_ctx.is_lens_active = true;

@@ -1,15 +1,19 @@
 use egui::{vec2, Align2, Color32, FontId, Frame, Margin, Painter, Pos2, Rect, Rounding, Stroke};
 
 // ── SuperAgent Obsidian & Terracotta Color Tokens ────────────────────────────
-pub const COLOR_BG_OVERLAY: Color32 = Color32::from_rgba_premultiplied(12, 13, 15, 150);
-pub const COLOR_BG_CARD: Color32 = Color32::from_rgba_premultiplied(24, 25, 27, 248);
+// Note: Color32::from_rgba_premultiplied requires channels to be pre-scaled by alpha: (c * a) / 255
+pub const COLOR_BG_OVERLAY: Color32 = Color32::from_rgba_premultiplied(6, 7, 9, 160);
+pub const COLOR_BG_CARD: Color32 = Color32::from_rgba_premultiplied(19, 20, 23, 250);
 #[allow(dead_code)]
-pub const COLOR_BG_SURFACE: Color32 = Color32::from_rgba_premultiplied(33, 34, 38, 230);
-pub const COLOR_BG_INPUT: Color32 = Color32::from_rgba_premultiplied(14, 15, 17, 240);
+pub const COLOR_BG_SURFACE: Color32 = Color32::from_rgba_premultiplied(26, 28, 33, 240);
+pub const COLOR_BG_INPUT: Color32 = Color32::from_rgba_premultiplied(12, 13, 16, 245);
+pub const COLOR_BG_BTN: Color32 = Color32::from_rgba_premultiplied(16, 16, 16, 16);
+#[allow(dead_code)]
+pub const COLOR_BG_BTN_HOVER: Color32 = Color32::from_rgba_premultiplied(32, 32, 32, 32);
 
-pub const COLOR_BORDER_CARD: Color32 = Color32::from_rgba_premultiplied(50, 52, 58, 200);
-pub const COLOR_BORDER_SUBTLE: Color32 = Color32::from_rgba_premultiplied(255, 255, 255, 22);
-pub const COLOR_BORDER_FOCUSED: Color32 = Color32::from_rgba_premultiplied(217, 119, 87, 180);
+pub const COLOR_BORDER_CARD: Color32 = Color32::from_rgba_premultiplied(47, 50, 57, 220);
+pub const COLOR_BORDER_SUBTLE: Color32 = Color32::from_rgba_premultiplied(24, 24, 24, 24);
+pub const COLOR_BORDER_FOCUSED: Color32 = Color32::from_rgba_premultiplied(170, 93, 68, 200);
 
 pub const COLOR_ACCENT_TERRACOTTA: Color32 = Color32::from_rgb(217, 119, 87);
 pub const COLOR_ACCENT_CYAN: Color32 = Color32::from_rgb(56, 189, 248);
@@ -18,7 +22,7 @@ pub const COLOR_STATUS_CRIMSON: Color32 = Color32::from_rgb(248, 113, 113);
 
 pub const COLOR_TEXT_MAIN: Color32 = Color32::from_rgb(243, 244, 246);
 pub const COLOR_TEXT_MUTED: Color32 = Color32::from_rgb(156, 163, 175);
-pub const COLOR_TEXT_DIM: Color32 = Color32::from_rgb(107, 114, 128);
+pub const COLOR_TEXT_DIM: Color32 = Color32::from_rgb(115, 120, 132);
 
 /// Returns the primary floating acrylic window frame for SuperAgent Circle to Search.
 pub fn hero_card_frame() -> Frame {
