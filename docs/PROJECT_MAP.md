@@ -20,7 +20,7 @@
 | **Browser Extension (MV3)** | `packages/browser-extension` | TypeScript (Vite) | `npx tsc -p packages/browser-extension/tsconfig.json --noEmit` | `Extension Specialist` |
 | **Terminal CLI & TUI** | `packages/cli` | Rust (Ratatui, Clap) | `cargo check -p superagent-cli` | `CLI Specialist` |
 | **Voice Dictation Native Overlay** | `packages/dictation-native` | Rust (egui, cpal) | `cargo test -p superagent-dictation-native` | `Native Overlay Specialist` |
-| **Circle-to-Search Native Overlay** | `packages/circle-search-native` | Rust (egui, eframe) | `cargo check -p superagent-circle-search-native` | `Native Overlay Specialist` |
+| **Circle-to-Search Native Overlay** | `packages/circle-search-native` | Rust (egui, eframe) | `cargo check -p superagent-circle-native` | `Native Overlay Specialist` |
 | **Artifacts Native Overlay** | `packages/artifacts-native` | Rust | `cargo test -p superagent-artifacts-native` | `Native Overlay Specialist` |
 | **UI Behavioral & Functional Spec** | `docs/UI_SPECIFICATION.md` | Markdown | N/A | `All Frontend Specialists` |
 | **Archived / Deprecated Core** | `legacy/` | TypeScript | 🚫 **NEVER TOUCH / READ ONLY** | N/A |
