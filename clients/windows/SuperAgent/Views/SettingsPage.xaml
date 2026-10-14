@@ -4,161 +4,210 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:SuperAgent.ViewModels"
+    xmlns:core="using:SuperAgent.Core"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="36,24">
-        <StackPanel MaxWidth="800" Spacing="24">
+    <ScrollViewer Padding="32,20">
+        <StackPanel MaxWidth="1100" Spacing="24">
             <!-- Header -->
-            <StackPanel Spacing="4">
-                <TextBlock Text="Settings" FontSize="28" FontWeight="SemiBold" />
-                <TextBlock Text="Configure SuperAgent daemon connection, model providers, and desktop preferences." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-
-            <!-- Server Connection Section -->
-            <StackPanel Spacing="12">
-                <TextBlock Text="Core Daemon Connection" FontSize="16" FontWeight="SemiBold" />
-                
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Daemon Host &amp; Port" FontWeight="Medium" />
-                                <TextBlock Text="Target HTTP and WebSocket loopback endpoint for core_v2 daemon." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                <TextBox x:Name="HostTextBox" Text="127.0.0.1" Width="120" />
-                                <TextBox x:Name="PortTextBox" Text="1469" Width="80" />
-                            </StackPanel>
-                        </Grid>
-
-                        <MenuFlyoutSeparator />
-
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Daemon API Token" FontWeight="Medium" />
-                                <TextBlock Text="Optional authentication Bearer token configured in ~/.superagent/web-server.lock" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <PasswordBox x:Name="TokenPasswordBox" Grid.Column="1" Width="208" PlaceholderText="superagent-secret" />
-                        </Grid>
-
-                        <MenuFlyoutSeparator />
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Connection Status: Ready" VerticalAlignment="Center" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <Button Grid.Column="1" Content="Reconnect Daemon" Click="ReconnectButton_Click" Style="{ThemeResource AccentButtonStyle}" />
-                        </Grid>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE713;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                        <TextBlock Text="Settings &amp; System Doctor" FontSize="26" FontWeight="SemiBold" />
                     </StackPanel>
-                </Border>
-            </StackPanel>
+                    <TextBlock Text="Configure 24 native intelligence modules, local model runtimes, and hardware diagnostics." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
 
-            <!-- Model Providers Section -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Command="{x:Bind ViewModel.SaveSettingsCommand}" Style="{ThemeResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE74E;" FontSize="12" />
+                            <TextBlock Text="Save Changes" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Feedback / Notification Banner -->
+            <Border Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="8" Padding="12,8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.FeedbackMessage, Mode=OneWay}" FontSize="12" FontWeight="Medium" />
+                </StackPanel>
+            </Border>
+
+            <!-- System Doctor Diagnostic Matrix -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="10" Padding="16">
+                <StackPanel Spacing="14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE890;" FontSize="16" Foreground="#10B981" />
+                                <TextBlock Text="System Doctor Environment Diagnostics" FontSize="16" FontWeight="SemiBold" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.OverallHealthStatus, Mode=OneWay}" FontSize="12" Foreground="#10B981" FontWeight="Medium" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Command="{x:Bind ViewModel.RunSystemDoctorCommand}" Style="{ThemeResource DefaultButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE72C;" FontSize="12" />
+                                <TextBlock Text="Run Diagnostics" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Diagnostics}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VariableSizedWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" ItemWidth="255" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="core:SystemDoctorDiagnostic">
+                                <Border Margin="0,0,8,8" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="8" Padding="12,10" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                    <Grid RowSpacing="4">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind Component}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                            <Border Grid.Column="1" Background="#064E3B" CornerRadius="4" Padding="6,2">
+                                                <TextBlock Text="{x:Bind Status}" FontSize="10" FontWeight="Bold" Foreground="#34D399" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Grid.Row="1" Text="{x:Bind Details}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Daemon Connection & Core Config -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="10" Padding="16">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="Core Daemon RPC Connection" FontSize="16" FontWeight="SemiBold" />
+                    
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Daemon Host &amp; WebSocket Port" FontWeight="Medium" />
+                            <TextBlock Text="Target loopback endpoint for core_v2 Axum daemon (/ws on port 1469)." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <TextBox Text="{x:Bind ViewModel.DaemonHost, Mode=TwoWay}" Width="130" PlaceholderText="127.0.0.1" />
+                            <TextBox Text="{x:Bind ViewModel.DaemonPort, Mode=TwoWay}" Width="80" PlaceholderText="1469" />
+                            <Button Content="Reconnect" Click="ReconnectButton_Click" Style="{ThemeResource AccentButtonStyle}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 24-Module Settings Catalog Section -->
             <StackPanel Spacing="12">
-                <TextBlock Text="Model Providers &amp; API Keys" FontSize="16" FontWeight="SemiBold" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Anthropic API Key" FontWeight="Medium" />
-                                <TextBlock Text="Claude 3.7 Sonnet, Claude 3.5 Haiku" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <PasswordBox Grid.Column="1" Width="240" PlaceholderText="sk-ant-..." />
-                        </Grid>
-
-                        <MenuFlyoutSeparator />
-
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="OpenAI API Key" FontWeight="Medium" />
-                                <TextBlock Text="GPT-4o, o3-mini" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <PasswordBox Grid.Column="1" Width="240" PlaceholderText="sk-proj-..." />
-                        </Grid>
-
-                        <MenuFlyoutSeparator />
-
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Google Gemini API Key" FontWeight="Medium" />
-                                <TextBlock Text="Gemini 2.0 Flash, Gemini 1.5 Pro" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <PasswordBox Grid.Column="1" Width="240" PlaceholderText="AIzaSy..." />
-                        </Grid>
-
-                        <MenuFlyoutSeparator />
-
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Local Ollama Endpoint" FontWeight="Medium" />
-                                <TextBlock Text="Local offline inference endpoint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <TextBox Grid.Column="1" Width="240" Text="http://127.0.0.1:11434" />
-                        </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="260" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Module Configuration Catalog (24 Modules)" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="Select a module card to inspect or customize parameters." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
-                </Border>
-            </StackPanel>
+                    <AutoSuggestBox
+                        Grid.Column="1"
+                        PlaceholderText="Filter 24 modules..."
+                        QueryIcon="Find"
+                        Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}" />
+                </Grid>
 
-            <!-- General & Diagnostics Section -->
-            <StackPanel Spacing="12">
-                <TextBlock Text="General &amp; Diagnostics" FontSize="16" FontWeight="SemiBold" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="16">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="SuperAgent Windows Client" FontWeight="Medium" />
-                                <TextBlock Text="WinUI 3 Native (Windows App SDK 1.5+)" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <TextBlock Grid.Column="1" Text="v2.0.0-preview" VerticalAlignment="Center" FontWeight="SemiBold" />
-                        </Grid>
-
-                        <MenuFlyoutSeparator />
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Smooth Streaming Animation" FontWeight="Medium" />
-                                <TextBlock Text="Animate token streaming and thought disclosure" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="1" IsOn="True" HorizontalAlignment="Right" />
-                        </Grid>
+                <!-- Category Filters Row -->
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Content="All (24)" Tag="All" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="System" Tag="System" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Intelligence" Tag="Intelligence" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Integrations" Tag="Integrations" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Automation" Tag="Automation" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Creative" Tag="Creative" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Security" Tag="Security" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Hardware" Tag="Hardware" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Voice" Tag="Voice" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="Companion" Tag="Companion" Click="CategoryFilter_Click" Style="{ThemeResource DefaultButtonStyle}" />
                     </StackPanel>
-                </Border>
+                </ScrollViewer>
+
+                <!-- Module Cards Grid -->
+                <ItemsControl ItemsSource="{x:Bind ViewModel.FilteredModules}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VariableSizedWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="3" ItemWidth="345" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="core:SettingsModule">
+                            <Border Margin="0,0,12,12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="14">
+                                <Grid RowSpacing="8">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Top Row: Icon, Title, Category -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="{x:Bind IconGlyph}" FontSize="18" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="4" Padding="6,2">
+                                            <TextBlock Text="{x:Bind Category}" FontSize="10" FontWeight="Medium" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </Border>
+                                    </Grid>
+
+                                    <!-- Middle: Description -->
+                                    <TextBlock Grid.Row="1" Text="{x:Bind Description}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxHeight="36" TextTrimming="CharacterEllipsis" />
+
+                                    <!-- Bottom: Status Pill + Configure Button -->
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Ellipse Width="6" Height="6" Fill="#10B981" />
+                                            <TextBlock Text="{x:Bind StatusSummary}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="Configure" FontSize="11" Padding="8,4" Style="{ThemeResource DefaultButtonStyle}" />
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

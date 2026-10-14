@@ -62,6 +62,19 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<SessionItem> Sessions { get; } = new();
     public ObservableCollection<ChatMessage> ActiveMessages { get; } = new();
 
+    public ComputerUseViewModel ComputerUse { get; }
+    public BrowserLeasingViewModel BrowserLeasing { get; }
+    public SecurityGuardianViewModel SecurityGuardian { get; }
+    public ReplConsoleViewModel ReplConsole { get; }
+    public CompanionViewModel Companion { get; }
+    public CreativeStudioViewModel CreativeStudio { get; }
+    public PcbEcadViewModel PcbEcad { get; }
+    public TasksViewModel Tasks { get; }
+    public SettingsViewModel Settings { get; }
+
+    [ObservableProperty]
+    private string _activeWorkspace = "Chat";
+
     [ObservableProperty]
     private string _activeSessionId = string.Empty;
 
@@ -96,6 +109,16 @@ public partial class MainViewModel : ObservableObject
     {
         _client = client ?? new DaemonClient();
         DaemonPort = _client.Port;
+
+        ComputerUse = new ComputerUseViewModel();
+        BrowserLeasing = new BrowserLeasingViewModel();
+        SecurityGuardian = new SecurityGuardianViewModel();
+        ReplConsole = new ReplConsoleViewModel();
+        Companion = new CompanionViewModel();
+        CreativeStudio = new CreativeStudioViewModel();
+        PcbEcad = new PcbEcadViewModel();
+        Tasks = new TasksViewModel();
+        Settings = new SettingsViewModel();
 
         _client.OnAgentEvent += HandleAgentEvent;
         _client.OnSessionSync += HandleSessionSync;

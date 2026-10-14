@@ -1,6 +1,7 @@
 // MainWindow.xaml.cs - WinUI 3 Main Window Codebehind
 using System;
 using System.Collections.Specialized;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -50,14 +51,47 @@ public sealed partial class MainWindow : Window
     {
         if (args.IsSettingsSelected)
         {
-            ChatPageGrid.Visibility = Visibility.Collapsed;
-            SettingsFrame.Visibility = Visibility.Visible;
-            SettingsFrame.Navigate(typeof(SettingsPage), ViewModel);
+            NavigateToWorkspace("Settings");
+            return;
         }
-        else
+
+        if (args.SelectedItem is NavigationViewItem item && item.Tag is string tag)
         {
-            SettingsFrame.Visibility = Visibility.Collapsed;
+            NavigateToWorkspace(tag);
+        }
+    }
+
+    private void NavigateToWorkspace(string workspaceTag)
+    {
+        ViewModel.ActiveWorkspace = workspaceTag;
+
+        if (workspaceTag == "Chat")
+        {
+            WorkspaceFrame.Visibility = Visibility.Collapsed;
             ChatPageGrid.Visibility = Visibility.Visible;
+            return;
+        }
+
+        ChatPageGrid.Visibility = Visibility.Collapsed;
+        WorkspaceFrame.Visibility = Visibility.Visible;
+
+        Type? pageType = workspaceTag switch
+        {
+            "ComputerUse" => typeof(ComputerUsePage),
+            "BrowserLeasing" => typeof(BrowserLeasingPage),
+            "ReplConsole" => typeof(ReplConsolePage),
+            "SecurityGuardian" => typeof(SecurityGuardianPage),
+            "Companion" => typeof(CompanionPage),
+            "CreativeStudio" => typeof(CreativeStudioPage),
+            "PcbEcad" => typeof(PcbEcadPage),
+            "Tasks" => typeof(TasksPage),
+            "Settings" => typeof(SettingsPage),
+            _ => null
+        };
+
+        if (pageType != null)
+        {
+            WorkspaceFrame.Navigate(pageType, ViewModel);
         }
     }
 
@@ -65,8 +99,14 @@ public sealed partial class MainWindow : Window
     {
         if (SessionsListView.SelectedItem is SessionItem selected)
         {
-            SettingsFrame.Visibility = Visibility.Collapsed;
-            ChatPageGrid.Visibility = Visibility.Visible;
+            NavigateToWorkspace("Chat");
+
+            // Sync NavView selection back to Chat
+            if (NavView.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string?)i.Tag == "Chat") is { } chatItem)
+            {
+                NavView.SelectedItem = chatItem;
+            }
+
             await ViewModel.SelectSessionAsync(selected.Id);
         }
     }

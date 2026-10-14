@@ -1,0 +1,179 @@
+<Page
+    x:Class="SuperAgent.Views.PcbEcadPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:SuperAgent.ViewModels"
+    xmlns:core="using:SuperAgent.Core"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="28,20">
+        <StackPanel MaxWidth="1100" Spacing="20">
+            <!-- Header -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="PCB &amp; Hardware ECAD Studio" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Circuit schematic editor, copper layer layout, real-time ERC rules checker, and KiCad/BOM exporter." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Command="{x:Bind ViewModel.ExportKiCadCommand}" Style="{ThemeResource DefaultButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8B7;" FontSize="12" />
+                            <TextBlock Text="Export KiCad 9" />
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{x:Bind ViewModel.ExportBomCommand}" Style="{ThemeResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8A5;" FontSize="12" />
+                            <TextBlock Text="Generate BOM CSV" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Mode Selector Bar (Schematic, Copper Layout, 3D Preview) -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="10" Padding="12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Schematic View" Command="{x:Bind ViewModel.SetViewModeCommand}" CommandParameter="Schematic" Style="{ThemeResource AccentButtonStyle}" />
+                        <Button Content="PCB Copper Layout" Command="{x:Bind ViewModel.SetViewModeCommand}" CommandParameter="Layout" Style="{ThemeResource DefaultButtonStyle}" />
+                        <Button Content="3D Board Preview" Command="{x:Bind ViewModel.SetViewModeCommand}" CommandParameter="3DPreview" Style="{ThemeResource DefaultButtonStyle}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </Border>
+
+            <!-- Main ECAD Split Stage -->
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.5*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Interactive Schematic & Copper Canvas -->
+                <Border Grid.Column="0" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="12">
+                        <!-- Canvas Visual Area -->
+                        <Border Height="340" Background="#061A23" BorderThickness="1" BorderBrush="#0F384C" CornerRadius="8">
+                            <Grid>
+                                <!-- Grid lines simulation -->
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+                                    <FontIcon Glyph="&#xE90F;" FontSize="48" Foreground="#06B6D4" />
+                                    <TextBlock Text="ESP32-S3 IoT Weather &amp; Environment Node" FontWeight="Bold" FontSize="15" Foreground="#F8FAFC" />
+                                    <TextBlock Text="6 Components Placed | 6 Power/Signal Nets Routed" FontSize="11" Foreground="#67E8F9" />
+                                </StackPanel>
+
+                                <!-- Circuit Schematic Elements Simulation -->
+                                <Canvas>
+                                    <Border Canvas.Left="40" Canvas.Top="40" Background="#0E2E3B" BorderThickness="1" BorderBrush="#22D3EE" CornerRadius="4" Padding="8,4">
+                                        <TextBlock Text="J1: USB-C 5V" FontSize="10" Foreground="#E0F2FE" />
+                                    </Border>
+                                    <Line X1="130" Y1="55" X2="200" Y2="55" Stroke="#EF4444" StrokeThickness="2" />
+                                    <Border Canvas.Left="200" Canvas.Top="40" Background="#0E2E3B" BorderThickness="1" BorderBrush="#22D3EE" CornerRadius="4" Padding="8,4">
+                                        <TextBlock Text="U2: AMS1117-3.3" FontSize="10" Foreground="#E0F2FE" />
+                                    </Border>
+                                    <Line X1="310" Y1="55" X2="380" Y2="55" Stroke="#10B981" StrokeThickness="2" />
+                                    <Border Canvas.Left="380" Canvas.Top="30" Background="#0E2E3B" BorderThickness="2" BorderBrush="#6366F1" CornerRadius="4" Padding="12,8">
+                                        <TextBlock Text="U1: ESP32-S3" FontSize="11" FontWeight="Bold" Foreground="#FFFFFF" />
+                                    </Border>
+                                </Canvas>
+                            </Grid>
+                        </Border>
+
+                        <!-- Components & Footprints Table -->
+                        <TextBlock Text="Components Bill of Materials (BOM) Preview" FontWeight="SemiBold" FontSize="13" />
+                        <ListView ItemsSource="{x:Bind ViewModel.Components}" SelectedItem="{x:Bind ViewModel.SelectedComponent, Mode=TwoWay}" SelectionMode="Single" MaxHeight="140">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="core:PcbComponent">
+                                    <Grid ColumnSpacing="8" Padding="2,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="40" />
+                                            <ColumnDefinition Width="160" />
+                                            <ColumnDefinition Width="80" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{x:Bind Designator}" FontWeight="Bold" FontSize="11" Foreground="#06B6D4" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Mpn}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind LcscId}" FontSize="10" FontFamily="Consolas" Foreground="#8B5CF6" />
+                                        <TextBlock Grid.Column="3" Text="{x:Bind Footprint}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </Border>
+
+                <!-- Right: Real-Time ERC Rules Checker & AI Hardware Co-Pilot -->
+                <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="14">
+                        <!-- Real-time ERC Checker -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE7BA;" FontSize="14" Foreground="#F59E0B" />
+                                <TextBlock Text="Electrical Rules Check (ERC)" FontWeight="SemiBold" FontSize="13" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Command="{x:Bind ViewModel.RunErcCheckCommand}" Style="{ThemeResource DefaultButtonStyle}">
+                                <TextBlock Text="Re-Check" FontSize="11" />
+                            </Button>
+                        </Grid>
+
+                        <ListView ItemsSource="{x:Bind ViewModel.ErcViolations}">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="core:ErcRuleViolation">
+                                    <Border Margin="0,0,0,6" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="6" Padding="8">
+                                        <StackPanel Spacing="2">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{x:Bind RuleId}" FontSize="11" FontWeight="Bold" Foreground="#F59E0B" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Severity}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </Grid>
+                                            <TextBlock Text="{x:Bind Message}" FontSize="10" Foreground="#F8FAFC" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <!-- AI Hardware Co-Pilot -->
+                        <TextBlock Text="AI Hardware Co-Pilot" FontWeight="SemiBold" FontSize="13" />
+                        <ListView ItemsSource="{x:Bind ViewModel.AiCopilotMessages}" MaxHeight="140">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{x:Bind}" FontSize="11" TextWrapping="Wrap" Margin="0,2" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Text="{x:Bind ViewModel.CoPilotInput, Mode=TwoWay}" PlaceholderText="Ask hardware co-pilot..." />
+                            <Button Grid.Column="1" Command="{x:Bind ViewModel.SendCoPilotMessageCommand}" Style="{ThemeResource AccentButtonStyle}">
+                                <FontIcon Glyph="&#xE724;" FontSize="12" />
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

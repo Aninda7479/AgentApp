@@ -387,4 +387,310 @@ public class ProtocolTests
         Assert.Equal("SYNC_SESSION", Commands.WsActionSyncSession);
         Assert.Equal("session-sync", Commands.WsChannelSessionSync);
     }
+
+    #region Workspace Model Serialization and Demo Integrity Tests
+
+    [Fact]
+    public void TestComputerUseState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetComputerUseDemo();
+        Assert.NotNull(state);
+        Assert.NotEmpty(state.Windows);
+        Assert.NotNull(state.AccessibilityRoot);
+        Assert.NotEmpty(state.TrajectoryPoints);
+        Assert.Equal(800, state.SettlingTotalMs);
+        Assert.True(state.IsSettled);
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"windows\":", json);
+        Assert.Contains("\"accessibilityRoot\":", json);
+        Assert.Contains("\"trajectoryPoints\":", json);
+        Assert.Contains("\"settlingTotalMs\":800", json);
+
+        var roundtripped = JsonSerializer.Deserialize<ComputerUseState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(state.Windows.Count, roundtripped.Windows.Count);
+        Assert.Equal(state.TrajectoryPoints.Count, roundtripped.TrajectoryPoints.Count);
+        Assert.Equal(state.SettlingTotalMs, roundtripped.SettlingTotalMs);
+    }
+
+    [Fact]
+    public void TestBrowserLeasingState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetBrowserLeasingDemo();
+        Assert.NotNull(state);
+        Assert.NotEmpty(state.ActiveTabs);
+        Assert.NotEmpty(state.Tools);
+        Assert.NotEmpty(state.CdpEvents);
+        Assert.Contains(state.ActiveTabs, t => t.Tier == "claimExistingTab");
+        Assert.Contains(state.ActiveTabs, t => t.Tier == "createTab");
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"activeTabs\":", json);
+        Assert.Contains("\"tools\":", json);
+        Assert.Contains("\"cdpEvents\":", json);
+
+        var roundtripped = JsonSerializer.Deserialize<BrowserLeasingState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(state.ActiveTabs.Count, roundtripped.ActiveTabs.Count);
+        Assert.Equal(state.Tools.Count, roundtripped.Tools.Count);
+        Assert.Equal(state.CdpEvents.Count, roundtripped.CdpEvents.Count);
+    }
+
+    [Fact]
+    public void TestSecurityGuardianState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetSecurityGuardianDemo();
+        Assert.NotNull(state);
+        Assert.Equal(16, state.AllBadges.Count);
+        Assert.Equal(7, state.RecoveryBranches.Count);
+        Assert.True(state.IsLockScreenArmed);
+        Assert.NotNull(state.ActiveDecision);
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"allBadges\":", json);
+        Assert.Contains("\"recoveryBranches\":", json);
+        Assert.Contains("\"isLockScreenArmed\":true", json);
+
+        var roundtripped = JsonSerializer.Deserialize<SecurityGuardianState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(16, roundtripped.AllBadges.Count);
+        Assert.Equal(7, roundtripped.RecoveryBranches.Count);
+        Assert.Equal(state.ActiveTier, roundtripped.ActiveTier);
+    }
+
+    [Fact]
+    public void TestReplConsoleState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetReplConsoleDemo();
+        Assert.NotNull(state);
+        Assert.Equal(25000, state.MaxBufferTokens);
+        Assert.NotEmpty(state.Lines);
+        Assert.NotEmpty(state.ScopeVariables);
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"maxBufferTokens\":25000", json);
+        Assert.Contains("\"lines\":", json);
+        Assert.Contains("\"scopeVariables\":", json);
+
+        var roundtripped = JsonSerializer.Deserialize<ReplConsoleState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(25000, roundtripped.MaxBufferTokens);
+        Assert.Equal(state.Lines.Count, roundtripped.Lines.Count);
+        Assert.Equal(state.ScopeVariables.Count, roundtripped.ScopeVariables.Count);
+    }
+
+    [Fact]
+    public void TestCompanionState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetCompanionDemo();
+        Assert.NotNull(state);
+        Assert.NotEmpty(state.Visemes);
+        Assert.NotEmpty(state.Moods);
+        Assert.NotEmpty(state.PhotoPresets);
+        Assert.Equal("Aiko-chan (SuperAgent VRM Partner)", state.CompanionName);
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"companionName\":", json);
+        Assert.Contains("\"visemes\":", json);
+        Assert.Contains("\"activeMood\":", json);
+
+        var roundtripped = JsonSerializer.Deserialize<CompanionState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(state.CompanionName, roundtripped.CompanionName);
+        Assert.Equal(state.Visemes.Count, roundtripped.Visemes.Count);
+        Assert.Equal(state.ActiveMood, roundtripped.ActiveMood);
+    }
+
+    [Fact]
+    public void TestCreativeStudioState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetCreativeStudioDemo();
+        Assert.NotNull(state);
+        Assert.NotNull(state.ActiveImage);
+        Assert.NotEmpty(state.Filmstrip);
+        Assert.NotNull(state.ActiveVideo);
+        Assert.NotEmpty(state.VideoQueue);
+        Assert.NotEmpty(state.Palettes);
+        Assert.NotNull(state.Watermark);
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"activeImage\":", json);
+        Assert.Contains("\"filmstrip\":", json);
+        Assert.Contains("\"activeVideo\":", json);
+        Assert.Contains("\"videoQueue\":", json);
+
+        var roundtripped = JsonSerializer.Deserialize<CreativeStudioState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(state.Filmstrip.Count, roundtripped.Filmstrip.Count);
+        Assert.Equal(state.VideoQueue.Count, roundtripped.VideoQueue.Count);
+        Assert.Equal(state.Palettes.Count, roundtripped.Palettes.Count);
+    }
+
+    [Fact]
+    public void TestPcbEcadState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetPcbEcadDemo();
+        Assert.NotNull(state);
+        Assert.NotEmpty(state.Components);
+        Assert.NotEmpty(state.Nets);
+        Assert.NotEmpty(state.ErcViolations);
+        Assert.NotEmpty(state.Layers);
+        Assert.NotEmpty(state.AiCopilotHistory);
+        Assert.Equal("ESP32-S3 IoT Weather & Environment Node", state.ProjectName);
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"components\":", json);
+        Assert.Contains("\"nets\":", json);
+        Assert.Contains("\"ercViolations\":", json);
+        Assert.Contains("\"layers\":", json);
+
+        var roundtripped = JsonSerializer.Deserialize<PcbEcadState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(state.Components.Count, roundtripped.Components.Count);
+        Assert.Equal(state.Nets.Count, roundtripped.Nets.Count);
+        Assert.Equal(state.Layers.Count, roundtripped.Layers.Count);
+    }
+
+    [Fact]
+    public void TestTasksState_SerializationAndDemoIntegrity()
+    {
+        var state = DemoData.GetTasksDemo();
+        Assert.NotNull(state);
+        Assert.NotEmpty(state.Cards);
+        Assert.NotEmpty(state.Routines);
+
+        var columns = new HashSet<string>(state.Cards.Select(c => c.Column));
+        Assert.Contains("ToDo", columns);
+        Assert.Contains("InProgress", columns);
+        Assert.Contains("BlockedReview", columns);
+        Assert.Contains("Done", columns);
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"cards\":", json);
+        Assert.Contains("\"routines\":", json);
+
+        var roundtripped = JsonSerializer.Deserialize<TasksState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(state.Cards.Count, roundtripped.Cards.Count);
+        Assert.Equal(state.Routines.Count, roundtripped.Routines.Count);
+    }
+
+    [Fact]
+    public void TestSettingsCatalogState_SerializationAnd24ModulesCoverage()
+    {
+        var state = DemoData.GetSettingsCatalogDemo();
+        Assert.NotNull(state);
+        Assert.Equal(24, state.Modules.Count);
+        Assert.Equal(8, state.Diagnostics.Count);
+        Assert.All(state.Diagnostics, d => Assert.True(d.IsPassed));
+
+        // Verify distinct modules
+        var ids = state.Modules.Select(m => m.Id).Distinct().ToList();
+        Assert.Equal(24, ids.Count);
+
+        // Verify key modules exist
+        Assert.Contains(state.Modules, m => m.Id == "general");
+        Assert.Contains(state.Modules, m => m.Id == "providers");
+        Assert.Contains(state.Modules, m => m.Id == "local_models");
+        Assert.Contains(state.Modules, m => m.Id == "doctor");
+        Assert.Contains(state.Modules, m => m.Id == "security_guardian");
+        Assert.Contains(state.Modules, m => m.Id == "pcb_rules");
+        Assert.Contains(state.Modules, m => m.Id == "companion_pet");
+        Assert.Contains(state.Modules, m => m.Id == "repl_terminal");
+
+        var json = JsonSerializer.Serialize(state, JsonOptions);
+        Assert.Contains("\"modules\":", json);
+        Assert.Contains("\"diagnostics\":", json);
+
+        var roundtripped = JsonSerializer.Deserialize<SettingsCatalogState>(json, JsonOptions);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(24, roundtripped.Modules.Count);
+        Assert.Equal(8, roundtripped.Diagnostics.Count);
+    }
+
+    [Fact]
+    public void TestZoSecurityDecisionBadges_16Vectors()
+    {
+        var state = DemoData.GetSecurityGuardianDemo();
+        Assert.Equal(16, state.AllBadges.Count);
+
+        // Verify distinct codes from 0 to 15
+        var codes = state.AllBadges.Select(b => b.StateCode).OrderBy(c => c).ToList();
+        for (int i = 0; i < 16; i++)
+        {
+            Assert.Contains(i, codes);
+        }
+
+        // Verify all badges have non-empty labels, rationales, and valid colors
+        foreach (var badge in state.AllBadges)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(badge.Label));
+            Assert.False(string.IsNullOrWhiteSpace(badge.Rationale));
+            Assert.StartsWith("#", badge.ColorHex);
+        }
+    }
+
+    [Fact]
+    public void TestCredentialRecovery_7Branches()
+    {
+        var state = DemoData.GetSecurityGuardianDemo();
+        Assert.Equal(7, state.RecoveryBranches.Count);
+
+        // Verify distinct branch IDs 1 to 7
+        var branchIds = state.RecoveryBranches.Select(b => b.BranchId).OrderBy(id => id).ToList();
+        for (int i = 1; i <= 7; i++)
+        {
+            Assert.Contains(i, branchIds);
+        }
+
+        foreach (var branch in state.RecoveryBranches)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(branch.ActionName));
+            Assert.False(string.IsNullOrWhiteSpace(branch.ProtocolSummary));
+            Assert.True(branch.IsAvailable);
+        }
+    }
+
+    [Fact]
+    public void TestCompanionVisemes_5MouthShapes()
+    {
+        var state = DemoData.GetCompanionDemo();
+        Assert.Equal(5, state.Visemes.Count);
+
+        var visemeNames = state.Visemes.Select(v => v.Viseme).ToList();
+        Assert.Contains("aa", visemeNames);
+        Assert.Contains("ih", visemeNames);
+        Assert.Contains("ou", visemeNames);
+        Assert.Contains("ee", visemeNames);
+        Assert.Contains("oh", visemeNames);
+
+        foreach (var viseme in state.Visemes)
+        {
+            Assert.InRange(viseme.Weight, 0.0, 1.0);
+        }
+    }
+
+    [Fact]
+    public void TestSystemDoctor_8DiagnosticsAllPassed()
+    {
+        var state = DemoData.GetSettingsCatalogDemo();
+        Assert.Equal(8, state.Diagnostics.Count);
+
+        var components = state.Diagnostics.Select(d => d.Component).ToList();
+        Assert.Contains(components, c => c.Contains("Node.js"));
+        Assert.Contains(components, c => c.Contains("Rust"));
+        Assert.Contains(components, c => c.Contains("FFmpeg"));
+        Assert.Contains(components, c => c.Contains("CUDA") || c.Contains("GPU"));
+        Assert.Contains(components, c => c.Contains("1469"));
+
+        Assert.All(state.Diagnostics, d =>
+        {
+            Assert.True(d.IsPassed);
+            Assert.Equal("Healthy", d.Status);
+            Assert.False(string.IsNullOrWhiteSpace(d.Details));
+        });
+    }
+
+    #endregion
 }

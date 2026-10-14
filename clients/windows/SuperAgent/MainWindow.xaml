@@ -18,6 +18,7 @@
         <converters:BoolToVisibilityConverter x:Key="InverseBoolToVis" Invert="True" />
         <converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVis" />
         <converters:ConnectionStatusTextConverter x:Key="ConnStatusText" />
+        <converters:ConnectionStatusColorConverter x:Key="ConnStatusColor" />
 
         <DataTemplate x:Key="SessionItemTemplate" x:DataType="vm:SessionItem">
             <Grid Padding="8,6" ColumnSpacing="8">
@@ -38,7 +39,7 @@
         IsBackButtonVisible="Collapsed"
         IsSettingsVisible="True"
         SelectionChanged="NavView_SelectionChanged"
-        OpenPaneLength="280">
+        OpenPaneLength="260">
 
         <!-- Header / New Chat action inside PaneHeader -->
         <NavigationView.PaneHeader>
@@ -54,32 +55,87 @@
                     </StackPanel>
                 </Button>
                 <AutoSuggestBox
-                    PlaceholderText="Search conversations..."
+                    PlaceholderText="Search..."
                     QueryIcon="Find"
                     Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}" />
             </StackPanel>
         </NavigationView.PaneHeader>
 
-        <!-- Sidebar Sessions List -->
+        <!-- 10 Dedicated Workspace Navigation Items -->
         <NavigationView.MenuItems>
-            <NavigationViewItemHeader Content="Chats" />
+            <NavigationViewItem Tag="Chat" Content="Chat" IsSelected="True">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE8BD;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="ComputerUse" Content="Computer Use">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE7F4;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="BrowserLeasing" Content="Browser Leasing">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE774;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="ReplConsole" Content="REPL Console">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE756;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="SecurityGuardian" Content="Security Guardian">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xEA18;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="Companion" Content="Companion 3D">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE76E;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="CreativeStudio" Content="Creative Studio">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xEB9F;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="PcbEcad" Content="PCB ECAD">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE90F;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="Tasks" Content="Tasks &amp; Kanban">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE823;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
         </NavigationView.MenuItems>
 
+        <!-- Sidebar Active Sessions Expander -->
         <NavigationView.PaneCustomContent>
-            <ListView
-                x:Name="SessionsListView"
-                ItemsSource="{x:Bind ViewModel.Sessions}"
-                ItemTemplate="{StaticResource SessionItemTemplate}"
-                SelectionMode="Single"
-                SelectionChanged="SessionsListView_SelectionChanged"
-                Margin="8,0,8,8" />
+            <Expander Header="Recent Chats" IsExpanded="True" HorizontalAlignment="Stretch" Margin="8,4,8,8">
+                <ListView
+                    x:Name="SessionsListView"
+                    ItemsSource="{x:Bind ViewModel.Sessions}"
+                    ItemTemplate="{StaticResource SessionItemTemplate}"
+                    SelectionMode="Single"
+                    SelectionChanged="SessionsListView_SelectionChanged"
+                    MaxHeight="200" />
+            </Expander>
         </NavigationView.PaneCustomContent>
 
         <!-- Footer / Daemon Status -->
         <NavigationView.PaneFooter>
             <Border Margin="12,8" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8" Fill="{x:Bind ViewModel.IsConnected, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                    <Ellipse Width="8" Height="8" Fill="{x:Bind ViewModel.IsConnected, Mode=OneWay, Converter={StaticResource ConnStatusColor}}" />
                     <TextBlock Text="Daemon:" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock Text="{x:Bind ViewModel.IsConnected, Mode=OneWay, Converter={StaticResource ConnStatusText}}" FontSize="11" FontWeight="SemiBold" />
                     <TextBlock Text=":" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -91,6 +147,7 @@
         <!-- Main Content Area -->
         <NavigationView.Content>
             <Grid x:Name="ContentRoot">
+                <!-- Chat Page Workspace -->
                 <Grid x:Name="ChatPageGrid">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -129,7 +186,7 @@
                             <ItemsControl ItemsSource="{x:Bind ViewModel.ActiveMessages}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:ChatMessage">
-                                        <Grid Margin="0,4" HorizontalAlignment="{x:Bind IsUser, Mode=OneWay}">
+                                        <Grid Margin="0,4">
                                             <!-- Assistant Message Box -->
                                             <Border
                                                 Visibility="{x:Bind IsAssistant, Mode=OneWay, Converter={StaticResource BoolToVis}}"
@@ -307,8 +364,8 @@
                     </Border>
                 </Grid>
 
-                <!-- Settings Page Host Frame -->
-                <Frame x:Name="SettingsFrame" Visibility="Collapsed" />
+                <!-- Dedicated Workspace Host Frame (Switches between all other 9 pages) -->
+                <Frame x:Name="WorkspaceFrame" Visibility="Collapsed" />
             </Grid>
         </NavigationView.Content>
     </NavigationView>

@@ -45,10 +45,13 @@ public class StringNotEmptyToVisibilityConverter : IValueConverter
 
 public class ConnectionStatusColorConverter : IValueConverter
 {
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush ConnectedBrush = new(Windows.UI.Color.FromArgb(255, 16, 185, 129));
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush DisconnectedBrush = new(Windows.UI.Color.FromArgb(255, 239, 68, 68));
+
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         var isConnected = value is true;
-        return isConnected ? "#10B981" : "#EF4444"; // Emerald green vs Red
+        return isConnected ? ConnectedBrush : DisconnectedBrush;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
