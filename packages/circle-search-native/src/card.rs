@@ -57,25 +57,15 @@ fn render_styled_text_chunk(ui: &mut egui::Ui, text: &str) {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ActiveTab {
-    All,
-    Insights,
-    CodeOcr,
-    Web,
-}
-
 pub struct CardRenderContext<'a> {
     pub query: &'a mut String,
     pub follow_up_query: &'a mut String,
-    pub active_tab: &'a mut ActiveTab,
     pub is_loading: bool,
     pub is_lens_active: &'a mut bool,
     pub is_fullscreen_mode: &'a mut bool,
     pub ai_response: &'a Option<String>,
     pub error_msg: &'a Option<String>,
     pub selection_rect: &'a mut Option<Rect>,
-    pub crop_texture: &'a Option<egui::TextureHandle>,
     pub copied_toast_timer: f32,
     pub copied_toast_msg: &'a str,
 }

@@ -152,6 +152,34 @@ This document is the persistent memory ledger for the end-to-end migration of Su
 
 ---
 
+### Supplementary Milestone: Dedicated Multi-Workspace Native UI Implementation
+* **Objective**:
+  1. Build complete dedicated native frontends across Web (`clients/web`), Windows (`clients/windows`), macOS (`clients/macos`), and Linux (`clients/linux`) covering all 10 core workspaces:
+     - `Chat` (Agent trajectories, thoughts, tool executions)
+     - `ComputerUse` (Windows Graphics Capture Direct3D11 canvas, Accessibility tree inspector, mouse velocity visualizer, adaptive settling)
+     - `BrowserLeasing` (Two-tiered tab claiming vs creation, WebMCP in-page tools registry, CDP stream logger, injected DOM badge)
+     - `ReplConsole` (In-process QuickJS REPL sandbox, 25,000 virtualized token buffer, ANSI syntax color parser, live scope tree)
+     - `SecurityGuardian` (4-Tier confirmation modal, 16-state `zo` decision machine badges, LockScreen guardian shield, Credential Vault 7-branch recovery)
+     - `Companion` (3D VRM humanoid partner, procedural emotion synchronization, audio viseme lip-sync meter, floating desktop pet popout)
+     - `CreativeStudio` (Image diffusion stage with color conditioning and watermarks, Video generation stage with cinematographic prompt enhancer)
+     - `PcbEcad` (Schematic circuit editor, copper layer layout, real-time ERC rules checker, AI Hardware Co-Pilot, KiCad 9 & BOM exporter)
+     - `Tasks` (4-column Kanban board, cron routines modal with presets and Telegram notifications)
+     - `Settings` (Expanded 24-module settings matrix, System Doctor hardware diagnostics)
+  2. Embed rich demo datasets with canonical `#DEMO_<FEATURE_NAME>` search tags and backend routes across all four client implementations.
+  3. Resolve WinUI 3 XAML compiler (`XamlCompiler.exe`) constraints, two-way bindings, and runner scripts.
+* **Status**: `COMPLETED`
+* **Checkpoints**:
+  - [x] Web Dedicated Client verified (`npm run test:web` passing 35/35 tests, TypeScript checking clean with 0 errors)
+  - [x] Windows Dedicated Client verified (`node scripts/run-dotnet.js build` passing with 0 warnings, 0 errors)
+  - [x] Windows unit test suite verified (`npm run test:windows` passing 31/31 tests)
+  - [x] Windows self-contained Release publish verified (`npm run build:windows` generating standalone x64 binary)
+  - [x] Linux Dedicated Client verified (`cargo test -p superagent-linux-client` passing with 0 errors)
+  - [x] macOS Dedicated Client views, models, and demo data verified
+  - [x] Multi-platform dev runners and automatic GitHub release workflows configured
+
+---
+
 ## 3. Active Incident / Recovery Notes
 * **Restart Recovery**: If an agent resumes mid-flight, check which phase checkpoint was last checked above. Continue strictly from that unchecked item.
+
 
