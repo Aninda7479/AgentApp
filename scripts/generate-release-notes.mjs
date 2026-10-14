@@ -67,10 +67,34 @@ const cliMacIntelZip = `superagent-cli-v${version}-macos-x64.zip`;
 const cliLinuxX64Tar = `superagent-cli-v${version}-linux-x64.tar.gz`;
 const cliLinuxArmTar = `superagent-cli-v${version}-linux-arm64.tar.gz`;
 
+// Dedicated Native OS Binaries (WinUI 3, SwiftUI, GTK4)
+const nativeWinZip = `superagent-windows-native-v${version}-x64.zip`;
+const nativeMacTar = `superagent-macos-native-v${version}-universal.tar.gz`;
+const nativeLinuxTar = `superagent-linux-native-v${version}-x64.tar.gz`;
+
 // Browser Extension bundle
 const extZipName = findArtifactFile(/^superagent-browser-extension.*\.zip$/i) || `superagent-browser-extension-v${version}.zip`;
 
-// ── Desktop installer rows ───────────────────────────────────────────────────
+// ── Dedicated Native OS Client rows ──────────────────────────────────────────
+const nativeRows = [
+  {
+    os: '🪟 **Windows (WinUI 3 Native)**',
+    link: `[${nativeWinZip}](${BASE}/${encodeURIComponent(nativeWinZip)})`,
+    desc: 'Direct WinUI 3 / Mica, lowest latency, zero Webview overhead (Win 10/11)',
+  },
+  {
+    os: '🍎 **macOS (SwiftUI Native)**',
+    link: `[${nativeMacTar}](${BASE}/${encodeURIComponent(nativeMacTar)})`,
+    desc: 'Pure SwiftUI native client, Universal Apple Silicon & Intel',
+  },
+  {
+    os: '🐧 **Linux (GTK4 / Libadwaita Native)**',
+    link: `[${nativeLinuxTar}](${BASE}/${encodeURIComponent(nativeLinuxTar)})`,
+    desc: 'Pure Rust GTK4 / Libadwaita desktop client for Wayland & X11',
+  },
+];
+
+// ── Classic Desktop installer rows (Tauri) ───────────────────────────────────
 const desktopRows = [
   {
     os: '🪟 **Windows**',
@@ -140,6 +164,12 @@ try {
   else prevVersion = `${maj - 1}.0.0`;
 } catch { /* ignore */ }
 
+const nativeTable = [
+  '| Operating System | Native Download Link | Architecture & Technology |',
+  '| :--- | :--- | :--- |',
+  ...nativeRows.map(r => `| ${r.os} | ${r.link} | ${r.desc} |`),
+].join('\n');
+
 const desktopTable = [
   '| Platform | Direct Downloads | Description |',
   '| :--- | :--- | :--- |',
@@ -155,16 +185,23 @@ const cliTable = [
 const notes = `\
 ### ⚡ Quick Direct Download Links
 
-* 🪟 **Windows**: [Installer (.exe)](${BASE}/${encodeURIComponent(winExeName)}) &bull; [MSI (.msi)](${BASE}/${encodeURIComponent(winMsiName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliWinZip})
-* 🍎 **macOS (Apple Silicon)**: [DMG (.dmg)](${BASE}/${encodeURIComponent(macArmDmgName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliMacArmZip})
-* 🍎 **macOS (Intel)**: [DMG (.dmg)](${BASE}/${encodeURIComponent(macIntelDmgName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliMacIntelZip})
-* 🐧 **Linux**: [AppImage (.AppImage)](${BASE}/${encodeURIComponent(linuxAppImageName)}) &bull; [Debian/Ubuntu (.deb)](${BASE}/${encodeURIComponent(linuxDebName)}) &bull; [Fedora/RHEL (.rpm)](${BASE}/${encodeURIComponent(linuxRpmName)}) &bull; [Standalone (.tar.gz)](${BASE}/${cliLinuxX64Tar})
+* 🪟 **Windows**: [Native WinUI 3 (.zip)](${BASE}/${encodeURIComponent(nativeWinZip)}) &bull; [Tauri Installer (.exe)](${BASE}/${encodeURIComponent(winExeName)}) &bull; [MSI (.msi)](${BASE}/${encodeURIComponent(winMsiName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliWinZip})
+* 🍎 **macOS**: [Native SwiftUI (.tar.gz)](${BASE}/${encodeURIComponent(nativeMacTar)}) &bull; [Tauri Apple Silicon (.dmg)](${BASE}/${encodeURIComponent(macArmDmgName)}) &bull; [Tauri Intel (.dmg)](${BASE}/${encodeURIComponent(macIntelDmgName)}) &bull; [CLI (.zip)](${BASE}/${cliMacArmZip})
+* 🐧 **Linux**: [Native GTK4 (.tar.gz)](${BASE}/${encodeURIComponent(nativeLinuxTar)}) &bull; [Tauri AppImage (.AppImage)](${BASE}/${encodeURIComponent(linuxAppImageName)}) &bull; [Debian/Ubuntu (.deb)](${BASE}/${encodeURIComponent(linuxDebName)}) &bull; [Fedora/RHEL (.rpm)](${BASE}/${encodeURIComponent(linuxRpmName)})
 * 🧩 **Browser Extension**: [Extension Bundle (.zip)](${BASE}/${encodeURIComponent(extZipName)}) *(Chrome, Edge, Brave, Arc)*
 * 🌐 **Headless Server / HomeLab**: [Linux x64](${BASE}/${cliLinuxX64Tar}) &bull; [Linux ARM64](${BASE}/${cliLinuxArmTar}) &bull; [macOS ARM64](${BASE}/${cliMacArmZip}) &bull; [Windows x64](${BASE}/${cliWinZip})
 
 ---
 
-### 🖥️ Desktop Application Installers
+### 🚀 Dedicated Platform-Native Desktop Clients (Recommended)
+
+SuperAgent now ships high-performance, platform-native frontends written in native technologies for maximum speed, lowest memory footprint, and native OS integration:
+
+${nativeTable}
+
+---
+
+### 🖥️ Classic Desktop Application Installers (Tauri)
 
 ${desktopTable}
 
