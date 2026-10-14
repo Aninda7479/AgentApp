@@ -10,44 +10,106 @@ use app::CircleSearchApp;
 use capture::capture_active_screen;
 
 #[cfg(target_os = "windows")]
-fn spawn_hotkey_listener(egui_ctx: egui::Context) -> std::sync::mpsc::Receiver<()> {
+pub static MAIN_THREAD_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+#[cfg(target_os = "windows")]
+pub static MAIN_HWND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(target_os = "windows")]
+#[allow(clippy::upper_case_acronyms)]
+#[repr(C)]
+pub struct MSG {
+    pub hwnd: *mut std::ffi::c_void,
+    pub message: u32,
+    pub w_param: usize,
+    pub l_param: isize,
+    pub time: u32,
+    pub pt_x: i32,
+    pub pt_y: i32,
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "user32")]
+extern "system" {
+    pub fn PeekMessageW(
+        msg: *mut MSG,
+        hwnd: *mut std::ffi::c_void,
+        w_msg_filter_min: u32,
+        w_msg_filter_max: u32,
+        w_remove_msg: u32,
+    ) -> i32;
+    pub fn RegisterHotKey(hwnd: *mut std::ffi::c_void, id: i32, fs_modifiers: u32, vk: u32) -> i32;
+    pub fn GetMessageW(
+        msg: *mut MSG,
+        hwnd: *mut std::ffi::c_void,
+        w_msg_filter_min: u32,
+        w_msg_filter_max: u32,
+    ) -> i32;
+    pub fn ShowWindow(hwnd: *mut std::ffi::c_void, n_cmd_show: i32) -> i32;
+    pub fn SetForegroundWindow(hwnd: *mut std::ffi::c_void) -> i32;
+    pub fn IsWindowVisible(hwnd: *mut std::ffi::c_void) -> i32;
+    pub fn EnumThreadWindows(
+        dw_thread_id: u32,
+        lp_fn: extern "system" fn(*mut std::ffi::c_void, isize) -> i32,
+        l_param: isize,
+    ) -> i32;
+    pub fn GetWindowTextW(
+        hwnd: *mut std::ffi::c_void,
+        lp_string: *mut u16,
+        n_max_count: i32,
+    ) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "kernel32")]
+extern "system" {
+    pub fn GetCurrentThreadId() -> u32;
+}
+
+#[cfg(target_os = "windows")]
+extern "system" fn enum_thread_wnd_callback(hwnd: *mut std::ffi::c_void, l_param: isize) -> i32 {
+    let mut buffer = [0u16; 256];
+    let len = unsafe { GetWindowTextW(hwnd, buffer.as_mut_ptr(), 256) };
+    if len > 0 {
+        let title = String::from_utf16_lossy(&buffer[..len as usize]);
+        if title.contains("SuperAgent") || title.contains("Circle") {
+            let out = unsafe { &mut *(l_param as *mut *mut std::ffi::c_void) };
+            *out = hwnd;
+            return 0; // Found target window
+        }
+    }
+    1 // Continue enumeration
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_app_hwnd() -> *mut std::ffi::c_void {
+    let existing = MAIN_HWND.load(std::sync::atomic::Ordering::SeqCst);
+    if existing != 0 {
+        return existing as *mut std::ffi::c_void;
+    }
+    let thread_id = MAIN_THREAD_ID.load(std::sync::atomic::Ordering::SeqCst);
+    if thread_id == 0 {
+        return std::ptr::null_mut();
+    }
+    let mut found: *mut std::ffi::c_void = std::ptr::null_mut();
+    unsafe {
+        EnumThreadWindows(
+            thread_id,
+            enum_thread_wnd_callback,
+            &mut found as *mut _ as isize,
+        );
+    }
+    if !found.is_null() {
+        MAIN_HWND.store(found as usize, std::sync::atomic::Ordering::SeqCst);
+    }
+    found
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_hotkey_listener(
+    egui_ctx: egui::Context,
+) -> std::sync::mpsc::Receiver<Result<capture::CapturedScreen, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        #[allow(clippy::upper_case_acronyms)]
-        #[repr(C)]
-        struct MSG {
-            hwnd: *mut std::ffi::c_void,
-            message: u32,
-            w_param: usize,
-            l_param: isize,
-            time: u32,
-            pt_x: i32,
-            pt_y: i32,
-        }
-
-        #[link(name = "user32")]
-        extern "system" {
-            fn PeekMessageW(
-                msg: *mut MSG,
-                hwnd: *mut std::ffi::c_void,
-                w_msg_filter_min: u32,
-                w_msg_filter_max: u32,
-                w_remove_msg: u32,
-            ) -> i32;
-            fn RegisterHotKey(
-                hwnd: *mut std::ffi::c_void,
-                id: i32,
-                fs_modifiers: u32,
-                vk: u32,
-            ) -> i32;
-            fn GetMessageW(
-                msg: *mut MSG,
-                hwnd: *mut std::ffi::c_void,
-                w_msg_filter_min: u32,
-                w_msg_filter_max: u32,
-            ) -> i32;
-        }
-
         const MOD_CONTROL: u32 = 0x0002;
         const MOD_SHIFT: u32 = 0x0004;
         const MOD_NOREPEAT: u32 = 0x4000;
@@ -89,7 +151,26 @@ fn spawn_hotkey_listener(egui_ctx: egui::Context) -> std::sync::mpsc::Receiver<(
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg as *mut MSG, std::ptr::null_mut(), 0, 0) > 0 {
                 if msg.message == WM_HOTKEY {
-                    let _ = tx.send(());
+                    let hwnd = get_app_hwnd();
+
+                    // If window was already visible, hide momentarily for pristine desktop capture
+                    if !hwnd.is_null() && IsWindowVisible(hwnd) != 0 {
+                        ShowWindow(hwnd, 0 /* SW_HIDE */);
+                        std::thread::sleep(std::time::Duration::from_millis(40));
+                    }
+
+                    // 1. Capture clean active screen under cursor while overlay is hidden
+                    let fresh = crate::capture::capture_active_screen();
+
+                    // 2. Unhide window via OS API so winit does NOT drop redraw requests
+                    if !hwnd.is_null() {
+                        ShowWindow(hwnd, 5 /* SW_SHOW */);
+                        ShowWindow(hwnd, 9 /* SW_RESTORE */);
+                        SetForegroundWindow(hwnd);
+                    }
+
+                    // 3. Dispatch fresh capture to app and wake up winit event loop
+                    let _ = tx.send(fresh);
                     egui_ctx.request_repaint();
                 }
             }
@@ -99,12 +180,19 @@ fn spawn_hotkey_listener(egui_ctx: egui::Context) -> std::sync::mpsc::Receiver<(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn spawn_hotkey_listener(_egui_ctx: egui::Context) -> std::sync::mpsc::Receiver<()> {
+fn spawn_hotkey_listener(
+    _egui_ctx: egui::Context,
+) -> std::sync::mpsc::Receiver<Result<capture::CapturedScreen, String>> {
     let (_tx, rx) = std::sync::mpsc::channel();
     rx
 }
 
 fn main() -> eframe::Result<()> {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        MAIN_THREAD_ID.store(GetCurrentThreadId(), std::sync::atomic::Ordering::SeqCst);
+    }
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -144,6 +232,10 @@ fn main() -> eframe::Result<()> {
         "SuperAgent Circle to Search",
         native_options,
         Box::new(move |cc| {
+            #[cfg(target_os = "windows")]
+            {
+                get_app_hwnd();
+            }
             // Configure dark mode visuals
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
             // Start global hotkey listener wired directly to egui_ctx to wake the loop from hidden state

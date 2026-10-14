@@ -37,14 +37,14 @@ pub struct CircleSearchApp {
     response_tx: Sender<Result<String, String>>,
     recapture_rx: Receiver<Result<CapturedScreen, String>>,
     recapture_tx: Sender<Result<CapturedScreen, String>>,
-    hotkey_rx: Receiver<()>,
+    hotkey_rx: Receiver<Result<CapturedScreen, String>>,
 }
 
 impl CircleSearchApp {
     pub fn new(
         captured: CapturedScreen,
         cc: &eframe::CreationContext<'_>,
-        hotkey_rx: Receiver<()>,
+        hotkey_rx: Receiver<Result<CapturedScreen, String>>,
     ) -> Self {
         let width = captured.image.width() as usize;
         let height = captured.image.height() as usize;
@@ -106,6 +106,15 @@ impl CircleSearchApp {
         self.error_msg = None;
         self.card_pos = None;
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        #[cfg(target_os = "windows")]
+        {
+            let hwnd = crate::get_app_hwnd();
+            if !hwnd.is_null() {
+                unsafe {
+                    crate::ShowWindow(hwnd, 0 /* SW_HIDE */);
+                }
+            }
+        }
         ctx.request_repaint();
     }
 
@@ -252,11 +261,9 @@ impl CircleSearchApp {
 impl eframe::App for CircleSearchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 0. Background Hotkey listener (Ctrl+Shift+C / Ctrl+Shift+S)
-        if self.hotkey_rx.try_recv().is_ok() {
-            if self.is_visible {
-                self.trigger_recapture(ctx);
-            } else {
-                if let Ok(fresh) = crate::capture::capture_active_screen() {
+        if let Ok(res) = self.hotkey_rx.try_recv() {
+            match res {
+                Ok(fresh) => {
                     let w = fresh.width as f32;
                     let h = fresh.height as f32;
                     let ox = fresh.origin_x;
@@ -265,13 +272,16 @@ impl eframe::App for CircleSearchApp {
                     ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
                     ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(ox, oy)));
                 }
-                self.is_visible = true;
-                self.is_interact_mode = false;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                ctx.request_repaint();
+                Err(err) => {
+                    self.error_msg = Some(format!("Screen capture error: {}", err));
+                }
             }
+            self.is_visible = true;
+            self.is_interact_mode = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            ctx.request_repaint();
         }
 
         // 1. Process asynchronous screen recapture results
