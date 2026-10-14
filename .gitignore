@@ -107,3 +107,4 @@ legacy/
 **/src-tauri/gen/schemas/
 
 codex_decompiled
+ui-blueprint
