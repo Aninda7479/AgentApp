@@ -165,7 +165,6 @@ fn spawn_hotkey_listener(
                     // 2. Unhide window via OS API so winit does NOT drop redraw requests
                     if !hwnd.is_null() {
                         ShowWindow(hwnd, 5 /* SW_SHOW */);
-                        ShowWindow(hwnd, 9 /* SW_RESTORE */);
                         SetForegroundWindow(hwnd);
                     }
 

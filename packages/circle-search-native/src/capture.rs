@@ -113,6 +113,7 @@ mod gdi {
             lpbmi: *mut BitmapInfoHeader,
             usage: u32,
         ) -> i32;
+        fn GetDeviceCaps(hdc: *mut std::ffi::c_void, index: i32) -> i32;
         fn DeleteObject(ho: *mut std::ffi::c_void) -> i32;
         fn DeleteDC(hdc: *mut std::ffi::c_void) -> i32;
     }
@@ -120,6 +121,8 @@ mod gdi {
     const SRCCOPY: u32 = 0x00CC0020;
     const BI_RGB: u32 = 0;
     const DIB_RGB_COLORS: u32 = 0;
+    const DESKTOPHORZRES: i32 = 118;
+    const DESKTOPVERTRES: i32 = 117;
 
     pub fn capture_gdi(
         x: i32,
@@ -133,13 +136,40 @@ mod gdi {
                 return Err("GetDC failed".to_string());
             }
 
+            // Ensure physical pixel dimensions (unscaled by DPI virtualization)
+            let cap_w = if w <= 0 {
+                GetDeviceCaps(hdc_screen, DESKTOPHORZRES)
+            } else if x == 0 && y == 0 {
+                let desk_w = GetDeviceCaps(hdc_screen, DESKTOPHORZRES);
+                if desk_w > 0 {
+                    w.max(desk_w)
+                } else {
+                    w
+                }
+            } else {
+                w
+            };
+
+            let cap_h = if h <= 0 {
+                GetDeviceCaps(hdc_screen, DESKTOPVERTRES)
+            } else if x == 0 && y == 0 {
+                let desk_h = GetDeviceCaps(hdc_screen, DESKTOPVERTRES);
+                if desk_h > 0 {
+                    h.max(desk_h)
+                } else {
+                    h
+                }
+            } else {
+                h
+            };
+
             let hdc_mem = CreateCompatibleDC(hdc_screen);
             if hdc_mem.is_null() {
                 ReleaseDC(std::ptr::null_mut(), hdc_screen);
                 return Err("CreateCompatibleDC failed".to_string());
             }
 
-            let h_bm = CreateCompatibleBitmap(hdc_screen, w, h);
+            let h_bm = CreateCompatibleBitmap(hdc_screen, cap_w, cap_h);
             if h_bm.is_null() {
                 DeleteDC(hdc_mem);
                 ReleaseDC(std::ptr::null_mut(), hdc_screen);
@@ -148,7 +178,7 @@ mod gdi {
 
             let old_bm = SelectObject(hdc_mem, h_bm);
 
-            let ok = BitBlt(hdc_mem, 0, 0, w, h, hdc_screen, x, y, SRCCOPY);
+            let ok = BitBlt(hdc_mem, 0, 0, cap_w, cap_h, hdc_screen, x, y, SRCCOPY);
             if ok == 0 {
                 SelectObject(hdc_mem, old_bm);
                 DeleteObject(h_bm);
@@ -159,8 +189,8 @@ mod gdi {
 
             let mut header = BitmapInfoHeader {
                 bi_size: std::mem::size_of::<BitmapInfoHeader>() as u32,
-                bi_width: w,
-                bi_height: -h, // Top-down DIB
+                bi_width: cap_w,
+                bi_height: -cap_h, // Top-down DIB
                 bi_planes: 1,
                 bi_bit_count: 32,
                 bi_compression: BI_RGB,
@@ -171,14 +201,14 @@ mod gdi {
                 bi_clr_important: 0,
             };
 
-            let total_pixels = (w * h) as usize;
+            let total_pixels = (cap_w * cap_h) as usize;
             let mut bgra_buf: Vec<u8> = vec![0u8; total_pixels * 4];
 
             let lines = GetDIBits(
                 hdc_mem,
                 h_bm,
                 0,
-                h as u32,
+                cap_h as u32,
                 bgra_buf.as_mut_ptr() as *mut std::ffi::c_void,
                 &mut header,
                 DIB_RGB_COLORS,
@@ -202,7 +232,7 @@ mod gdi {
                 chunk[3] = 255;
             }
 
-            ImageBuffer::from_raw(w as u32, h as u32, bgra_buf)
+            ImageBuffer::from_raw(cap_w as u32, cap_h as u32, bgra_buf)
                 .ok_or_else(|| "Failed to construct ImageBuffer from GDI bits".to_string())
         }
     }
@@ -269,10 +299,15 @@ pub fn capture_active_screen() -> Result<CapturedScreen, String> {
             // Secondary fallback on Windows using native GDI BitBlt
             #[cfg(target_os = "windows")]
             {
-                let sx = screen.display_info.x;
-                let sy = screen.display_info.y;
-                let sw = screen.display_info.width as i32;
-                let sh = screen.display_info.height as i32;
+                let scale = if scale_factor > 0.0 {
+                    scale_factor
+                } else {
+                    1.0
+                };
+                let sx = (screen.display_info.x as f64 * scale).round() as i32;
+                let sy = (screen.display_info.y as f64 * scale).round() as i32;
+                let sw = (screen.display_info.width as f64 * scale).round() as i32;
+                let sh = (screen.display_info.height as f64 * scale).round() as i32;
                 match gdi::capture_gdi(sx, sy, sw, sh) {
                     Ok(gdi_img) => gdi_img,
                     Err(gdi_err) => {

@@ -9,6 +9,8 @@ use crate::card::{render_hero_card, CardAction, CardRenderContext};
 use crate::theme;
 
 pub struct CircleSearchApp {
+    initial_size: egui::Vec2,
+    initial_pos: egui::Pos2,
     screen_info: CapturedScreen,
     screen_texture: Option<egui::TextureHandle>,
     crop_texture: Option<egui::TextureHandle>,
@@ -61,7 +63,12 @@ impl CircleSearchApp {
         let (tx, rx) = channel();
         let (recap_tx, recap_rx) = channel();
 
+        let initial_size = egui::vec2(captured.width as f32, captured.height as f32);
+        let initial_pos = egui::pos2(captured.origin_x, captured.origin_y);
+
         Self {
+            initial_size,
+            initial_pos,
             screen_info: captured,
             screen_texture,
             crop_texture: None,
@@ -97,6 +104,7 @@ impl CircleSearchApp {
         self.drag_current = None;
         self.is_drawing = false;
         self.is_lens_active = false;
+        let was_interact = self.is_interact_mode;
         self.is_interact_mode = false;
         self.is_visible = false;
         self.query.clear();
@@ -105,6 +113,10 @@ impl CircleSearchApp {
         self.ai_response = None;
         self.error_msg = None;
         self.card_pos = None;
+        if was_interact {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(self.initial_size));
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(self.initial_pos));
+        }
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         #[cfg(target_os = "windows")]
         {
@@ -169,6 +181,8 @@ impl CircleSearchApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
             ctx.request_repaint();
         } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(self.initial_size));
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(self.initial_pos));
             self.trigger_recapture(ctx);
         }
     }
@@ -262,15 +276,26 @@ impl eframe::App for CircleSearchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 0. Background Hotkey listener (Ctrl+Shift+C / Ctrl+Shift+S)
         if let Ok(res) = self.hotkey_rx.try_recv() {
+            let was_interact_mode = self.is_interact_mode;
             match res {
                 Ok(fresh) => {
                     let w = fresh.width as f32;
                     let h = fresh.height as f32;
                     let ox = fresh.origin_x;
                     let oy = fresh.origin_y;
+                    let monitor_changed = (ox - self.initial_pos.x).abs() > 1.0
+                        || (oy - self.initial_pos.y).abs() > 1.0
+                        || (w - self.initial_size.x).abs() > 1.0
+                        || (h - self.initial_size.y).abs() > 1.0;
                     self.reload_screen(ctx, fresh);
-                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(ox, oy)));
+                    if was_interact_mode || monitor_changed {
+                        self.initial_size = egui::vec2(w, h);
+                        self.initial_pos = egui::pos2(ox, oy);
+                        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(self.initial_size));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                            self.initial_pos,
+                        ));
+                    }
                 }
                 Err(err) => {
                     self.error_msg = Some(format!("Screen capture error: {}", err));
@@ -286,15 +311,26 @@ impl eframe::App for CircleSearchApp {
 
         // 1. Process asynchronous screen recapture results
         if let Ok(res) = self.recapture_rx.try_recv() {
+            let was_interact_mode = self.is_interact_mode;
             match res {
                 Ok(fresh) => {
                     let w = fresh.width as f32;
                     let h = fresh.height as f32;
                     let ox = fresh.origin_x;
                     let oy = fresh.origin_y;
+                    let monitor_changed = (ox - self.initial_pos.x).abs() > 1.0
+                        || (oy - self.initial_pos.y).abs() > 1.0
+                        || (w - self.initial_size.x).abs() > 1.0
+                        || (h - self.initial_size.y).abs() > 1.0;
                     self.reload_screen(ctx, fresh);
-                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(ox, oy)));
+                    if was_interact_mode || monitor_changed {
+                        self.initial_size = egui::vec2(w, h);
+                        self.initial_pos = egui::pos2(ox, oy);
+                        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(self.initial_size));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                            self.initial_pos,
+                        ));
+                    }
                     self.is_interact_mode = false;
                     self.copied_toast_timer = 2.0;
                     self.copied_toast_msg = "✓ Screen updated".to_string();
