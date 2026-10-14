@@ -1,5 +1,6 @@
 <Page
     x:Class="SuperAgent.Views.CreativeStudioPage"
+    x:Name="ThisPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -8,143 +9,306 @@
     xmlns:core="using:SuperAgent.Core"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="28,20">
-        <StackPanel MaxWidth="1100" Spacing="20">
-            <!-- Header -->
+    <ScrollViewer Padding="28,24" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="1180" Spacing="22">
+            <!-- Header Telemetry Strip -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Creative Studio (Images &amp; Videos)" FontSize="26" FontWeight="SemiBold" />
-                    <TextBlock Text="Multi-model diffusion canvas, color conditioning, watermark anchors, and cinematographic video generation." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Border Background="{StaticResource AccentElectricVioletBrush}" CornerRadius="6" Width="30" Height="30">
+                            <FontIcon Glyph="&#xEB9F;" FontSize="15" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="Creative Studio (Diffusion &amp; Video)" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                        <Border Background="{StaticResource ElevatedCardBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="12" Padding="10,3" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Ellipse Width="7" Height="7" Fill="{StaticResource StatusEmeraldBrush}" />
+                                <TextBlock Text="GPU 24GB VRAM ALLOCATED" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource StatusEmeraldBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Multi-model latent canvas, color conditioning, 7-point anchor watermarks, and cinematographic video generation." FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" />
                 </StackPanel>
-                <Border Grid.Column="1" Background="{ThemeResource LayerFillColorAltBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="12,6" VerticalAlignment="Center">
-                    <TextBlock Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}" FontSize="12" FontWeight="Medium" />
+
+                <!-- Status Banner Pill -->
+                <Border Grid.Column="1" Background="{StaticResource ElevatedCardBrush}" BorderBrush="{StaticResource BorderGlowBrush}" BorderThickness="1" CornerRadius="8" Padding="14,8" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE946;" FontSize="13" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}" FontSize="12" FontFamily="Consolas" FontWeight="Medium" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                    </StackPanel>
                 </Border>
             </Grid>
 
-            <!-- Top Grid: Image Generation Studio -->
-            <Grid ColumnSpacing="16">
+            <!-- Main Split Stage: Canvas Viewport & Controls Drawer -->
+            <Grid ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1.4*" />
+                    <ColumnDefinition Width="1.45*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Left: Canvas Preview -->
-                <Border Grid.Column="0" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="12" Padding="16">
-                    <StackPanel Spacing="12">
-                        <Border Height="320" Background="#1E1B4B" CornerRadius="8">
+                <!-- Left Column: High-Tech Viewport Canvas & Filmstrip Gallery -->
+                <StackPanel Grid.Column="0" Spacing="16">
+                    <!-- Dark Photo Studio Canvas -->
+                    <Border Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="12" Padding="18">
+                        <StackPanel Spacing="12">
+                            <!-- Canvas Telemetry Header -->
                             <Grid>
-                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-                                    <FontIcon Glyph="&#xEB9F;" FontSize="48" Foreground="#818CF8" />
-                                    <TextBlock Text="Active Canvas Preview (16:9)" FontSize="14" FontWeight="SemiBold" Foreground="#F8FAFC" />
-                                    <TextBlock Text="{x:Bind ViewModel.ActiveImage.Prompt, Mode=OneWay}" FontSize="11" Foreground="#C7D2FE" MaxWidth="440" TextAlignment="Center" TextWrapping="Wrap" />
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="ACTIVE LATENT STAGE" FontFamily="Consolas" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" />
+                                    <Border Background="{StaticResource ElevatedCardBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="4" Padding="6,1">
+                                        <TextBlock Text="{x:Bind ViewModel.SelectedAspectRatio, Mode=OneWay}" FontFamily="Consolas" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                    </Border>
+                                    <Border Background="{StaticResource ElevatedCardBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="4" Padding="6,1">
+                                        <TextBlock Text="{x:Bind ViewModel.SelectedEngine, Mode=OneWay}" FontFamily="Consolas" FontSize="10" Foreground="{StaticResource AccentElectricVioletBrush}" />
+                                    </Border>
                                 </StackPanel>
-                                <!-- Watermark Preview Pill (Bottom Right 7-point anchor) -->
-                                <Border VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="12" Background="#000000" Opacity="0.8" CornerRadius="4" Padding="6,2">
-                                    <TextBlock Text="{x:Bind ViewModel.Watermark.WatermarkText, Mode=OneWay}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" />
-                                </Border>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE790;" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                    <TextBlock Text="Direct3D 11 Render" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                                </StackPanel>
                             </Grid>
-                        </Border>
 
-                        <!-- Filmstrip Gallery (Bottom) -->
-                        <TextBlock Text="Filmstrip Gallery" FontWeight="SemiBold" FontSize="13" />
-                        <GridView ItemsSource="{x:Bind ViewModel.Filmstrip}" SelectionMode="Single">
-                            <GridView.ItemTemplate>
-                                <DataTemplate x:DataType="core:ImageItem">
-                                    <Border Width="110" Height="70" Background="#312E81" CornerRadius="6" Padding="6">
-                                        <StackPanel VerticalAlignment="Bottom">
-                                            <TextBlock Text="{x:Bind AspectRatio}" FontSize="9" FontWeight="Bold" Foreground="#A5B4FC" />
-                                            <TextBlock Text="{x:Bind Engine}" FontSize="8" Foreground="#E0E7FF" TextTrimming="CharacterEllipsis" />
+                            <!-- Viewport Canvas Stage with Reticle -->
+                            <Border Height="340" Background="#05070B" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8">
+                                <Grid>
+                                    <!-- Center Preview Stage -->
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+                                        <Border Width="80" Height="80" CornerRadius="40" Background="#0C101B" BorderBrush="{StaticResource AccentVioletGlowBrush}" BorderThickness="1" HorizontalAlignment="Center">
+                                            <FontIcon Glyph="&#xEB9F;" FontSize="36" Foreground="{StaticResource AccentCyberCyanBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="Active Canvas Preview (16:9)" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center" />
+                                        <TextBlock Text="{x:Bind ViewModel.ActiveImage.Prompt, Mode=OneWay}" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" MaxWidth="480" TextAlignment="Center" TextWrapping="Wrap" />
+                                        <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                                            <TextBlock Text="Seed: 492104" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+                                            <TextBlock Text="•" Foreground="{StaticResource TextMutedBrush}" />
+                                            <TextBlock Text="Sampler: Euler-A" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+                                            <TextBlock Text="•" Foreground="{StaticResource TextMutedBrush}" />
+                                            <TextBlock Text="Precision: FP16" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- 7-point Anchor Watermark Preview Pill (Bottom Right) -->
+                                    <Border VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="14" Background="#080B11" BorderBrush="{StaticResource BorderGlowBrush}" BorderThickness="1" CornerRadius="6" Padding="8,4">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE8B9;" FontSize="11" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                            <TextBlock Text="{x:Bind ViewModel.Watermark.WatermarkText, Mode=OneWay}" FontSize="10" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                            <Border Background="{StaticResource ElevatedCardBrush}" CornerRadius="3" Padding="4,1">
+                                                <TextBlock Text="{x:Bind ViewModel.Watermark.AnchorPlacement, Mode=OneWay}" FontSize="9" FontFamily="Consolas" Foreground="{StaticResource TextSecondaryBrush}" />
+                                            </Border>
                                         </StackPanel>
                                     </Border>
-                                </DataTemplate>
-                            </GridView.ItemTemplate>
-                        </GridView>
-                    </StackPanel>
-                </Border>
+                                </Grid>
+                            </Border>
 
-                <!-- Right: Controls & Parameters Drawer -->
-                <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="12" Padding="16">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="Prompt &amp; Settings" FontWeight="SemiBold" FontSize="14" />
-                        <TextBox Text="{x:Bind ViewModel.ImagePrompt, Mode=TwoWay}" PlaceholderText="Describe image..." AcceptsReturn="True" Height="60" TextWrapping="Wrap" />
-                        <TextBox Text="{x:Bind ViewModel.NegativePrompt, Mode=TwoWay}" PlaceholderText="Negative prompt (unwanted artifacts)..." FontSize="11" />
+                            <!-- Filmstrip Gallery Deck -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE8B7;" FontSize="13" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                    <TextBlock Text="FILMSTRIP LATENT CACHE" FontFamily="Consolas" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="Click thumbnail to inspect" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                            </Grid>
 
-                        <!-- Aspect Ratio Buttons -->
-                        <TextBlock Text="Aspect Ratio" FontSize="12" FontWeight="SemiBold" Margin="0,4,0,0" />
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <RadioButton Content="1:1" IsChecked="False" GroupName="AR" />
-                            <RadioButton Content="16:9" IsChecked="True" GroupName="AR" />
-                            <RadioButton Content="9:16" IsChecked="False" GroupName="AR" />
-                            <RadioButton Content="4:3" IsChecked="False" GroupName="AR" />
+                            <GridView ItemsSource="{x:Bind ViewModel.Filmstrip}" SelectionMode="Single">
+                                <GridView.ItemTemplate>
+                                    <DataTemplate x:DataType="core:ImageItem">
+                                        <Button
+                                            Command="{Binding Path=DataContext.SelectImageCommand, ElementName=ThisPage}"
+                                            CommandParameter="{Binding}"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0">
+                                            <Border Width="130" Height="84" Background="{StaticResource ElevatedCardBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8" Padding="8">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <Border Background="#06B6D4" CornerRadius="3" Padding="4,1">
+                                                            <TextBlock Text="{x:Bind AspectRatio}" FontSize="9" FontFamily="Consolas" FontWeight="Bold" Foreground="#080B11" />
+                                                        </Border>
+                                                        <TextBlock Text="{x:Bind Engine}" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Row="1" Text="{x:Bind Prompt}" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{x:Bind PaletteName}" FontSize="8" FontFamily="Consolas" Foreground="{StaticResource AccentElectricVioletBrush}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </GridView.ItemTemplate>
+                            </GridView>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Right Column: Latent Parameters Drawer -->
+                <Border Grid.Column="1" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="12" Padding="18">
+                    <StackPanel Spacing="14">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE713;" FontSize="15" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                            <TextBlock Text="LATENT PROMPT &amp; PARAMETERS" FontFamily="Consolas" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
                         </StackPanel>
 
-                        <!-- Curated Color Palettes -->
-                        <TextBlock Text="Color Palette Conditioning" FontSize="12" FontWeight="SemiBold" Margin="0,4,0,0" />
-                        <ComboBox ItemsSource="{x:Bind ViewModel.Palettes}" SelectedItem="{x:Bind ViewModel.SelectedPalette, Mode=TwoWay}" HorizontalAlignment="Stretch">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="core:PalettePreset">
-                                    <TextBlock Text="{x:Bind Name}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <!-- Prompt Input -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Positive Prompt" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                            <TextBox Text="{x:Bind ViewModel.ImagePrompt, Mode=TwoWay}" PlaceholderText="Describe desired visual output..." AcceptsReturn="True" Height="70" TextWrapping="Wrap" Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" Foreground="{StaticResource TextPrimaryBrush}" />
+                        </StackPanel>
 
-                        <!-- Sliders: Steps & CFG -->
-                        <Grid ColumnSpacing="12">
+                        <!-- Negative Prompt Input -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Negative Prompt (Artifacts Suppression)" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                            <TextBox Text="{x:Bind ViewModel.NegativePrompt, Mode=TwoWay}" PlaceholderText="blurry, low quality, artifacts, watermark..." FontSize="11" Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
+
+                        <!-- Aspect Ratio Segmented Buttons -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Target Aspect Ratio" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="1:1" Command="{x:Bind ViewModel.SetAspectRatioCommand}" CommandParameter="1:1" HorizontalAlignment="Stretch" Padding="0,6" Style="{ThemeResource DefaultButtonStyle}" FontFamily="Consolas" FontSize="11" />
+                                <Button Grid.Column="1" Content="16:9" Command="{x:Bind ViewModel.SetAspectRatioCommand}" CommandParameter="16:9" HorizontalAlignment="Stretch" Padding="0,6" Style="{ThemeResource AccentButtonStyle}" FontFamily="Consolas" FontSize="11" />
+                                <Button Grid.Column="2" Content="9:16" Command="{x:Bind ViewModel.SetAspectRatioCommand}" CommandParameter="9:16" HorizontalAlignment="Stretch" Padding="0,6" Style="{ThemeResource DefaultButtonStyle}" FontFamily="Consolas" FontSize="11" />
+                                <Button Grid.Column="3" Content="4:3" Command="{x:Bind ViewModel.SetAspectRatioCommand}" CommandParameter="4:3" HorizontalAlignment="Stretch" Padding="0,6" Style="{ThemeResource DefaultButtonStyle}" FontFamily="Consolas" FontSize="11" />
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Curated Color Palette Conditioning -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Color Palette Conditioning Preset" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                            <ComboBox ItemsSource="{x:Bind ViewModel.Palettes}" SelectedItem="{x:Bind ViewModel.SelectedPalette, Mode=TwoWay}" HorizontalAlignment="Stretch" Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource BorderSubtleBrush}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="core:PalettePreset">
+                                        <TextBlock Text="{x:Bind Name}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
+                            <!-- Color Swatches Row -->
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.Swatches}" Margin="0,4,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ColorSwatchItem">
+                                        <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                            <Border Width="24" Height="24" CornerRadius="12" Background="{x:Bind Brush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" />
+                                            <TextBlock Text="{x:Bind Hex}" FontFamily="Consolas" FontSize="8" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Sliders: Steps & CFG Scale -->
+                        <Grid ColumnSpacing="14" Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="Steps: 28" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <Slider Value="{x:Bind ViewModel.Steps, Mode=TwoWay}" Minimum="1" Maximum="50" />
+                            <StackPanel Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="Steps:" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                                    <TextBlock Text="{x:Bind ViewModel.Steps, Mode=OneWay}" FontFamily="Consolas" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                </StackPanel>
+                                <Slider Value="{x:Bind ViewModel.Steps, Mode=TwoWay}" Minimum="1" Maximum="50" Foreground="{StaticResource AccentCyberCyanBrush}" />
                             </StackPanel>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="CFG Scale: 7.0" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <Slider Value="{x:Bind ViewModel.CfgScale, Mode=TwoWay}" Minimum="1" Maximum="20" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="CFG Scale:" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                                    <TextBlock Text="{x:Bind ViewModel.CfgScale, Mode=OneWay}" FontFamily="Consolas" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentElectricVioletBrush}" />
+                                </StackPanel>
+                                <Slider Value="{x:Bind ViewModel.CfgScale, Mode=TwoWay}" Minimum="1" Maximum="20" Foreground="{StaticResource AccentElectricVioletBrush}" />
                             </StackPanel>
                         </Grid>
 
-                        <Button Command="{x:Bind ViewModel.GenerateImageCommand}" Style="{ThemeResource AccentButtonStyle}" HorizontalAlignment="Stretch" Margin="0,8,0,0">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xEB9F;" FontSize="12" />
-                                <TextBlock Text="Generate Image" FontWeight="SemiBold" />
+                        <!-- Generate Image Button -->
+                        <Button Command="{x:Bind ViewModel.GenerateImageCommand}" Style="{ThemeResource AccentButtonStyle}" HorizontalAlignment="Stretch" Height="40" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xEB9F;" FontSize="14" />
+                                <TextBlock Text="Synthesize Latent Frame" FontWeight="Bold" FontSize="13" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
                 </Border>
             </Grid>
 
-            <!-- Video Generation Stage -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="12" Padding="16">
-                <Grid ColumnSpacing="16">
+            <!-- Video Generation Stage (Wan2.1 / HunyuanVideo 14B) -->
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderGlowBrush}" CornerRadius="12" Padding="20">
+                <Grid ColumnSpacing="20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="320" />
                     </Grid.ColumnDefinitions>
+
                     <StackPanel Spacing="10">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE714;" FontSize="16" Foreground="#8B5CF6" />
-                            <TextBlock Text="AI Text-to-Video Stage (Wan2.1 / HunyuanVideo)" FontWeight="SemiBold" FontSize="15" />
+                            <FontIcon Glyph="&#xE714;" FontSize="18" Foreground="{StaticResource AccentElectricVioletBrush}" />
+                            <TextBlock Text="AI Text-to-Video Stage (Wan2.1 / HunyuanVideo 14B)" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <Border Background="#1E1B4B" CornerRadius="4" Padding="6,2">
+                                <TextBlock Text="T2V-14B FP8" FontFamily="Consolas" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentVioletGlowBrush}" />
+                            </Border>
                         </StackPanel>
-                        <TextBox Text="{x:Bind ViewModel.VideoPrompt, Mode=TwoWay}" PlaceholderText="Enter video scenario prompt..." />
-                        <TextBlock Text="{x:Bind ViewModel.EnhancedPrompt, Mode=OneWay}" FontSize="11" Foreground="#06B6D4" FontStyle="Italic" TextWrapping="Wrap" />
+                        <TextBlock Text="Generate cinematographic sequence with native camera trajectory and motion conditioning." FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                        
+                        <TextBox Text="{x:Bind ViewModel.VideoPrompt, Mode=TwoWay}" PlaceholderText="Enter video scenario prompt or choose descriptors below..." Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" Foreground="{StaticResource TextPrimaryBrush}" Height="54" TextWrapping="Wrap" />
+
+                        <!-- Cinematographic Descriptor Quick Chips -->
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Cinematics:" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                            <Button Content="4K Hyper-realistic" Command="{x:Bind ViewModel.AppendDescriptorCommand}" CommandParameter="4K hyper-realistic" Padding="6,2" FontSize="10" Style="{ThemeResource DefaultButtonStyle}" />
+                            <Button Content="Cinematic Lighting" Command="{x:Bind ViewModel.AppendDescriptorCommand}" CommandParameter="cinematic volumetric lighting" Padding="6,2" FontSize="10" Style="{ThemeResource DefaultButtonStyle}" />
+                            <Button Content="Anamorphic Flare" Command="{x:Bind ViewModel.AppendDescriptorCommand}" CommandParameter="anamorphic lens flare" Padding="6,2" FontSize="10" Style="{ThemeResource DefaultButtonStyle}" />
+                            <Button Content="Slow Motion" Command="{x:Bind ViewModel.AppendDescriptorCommand}" CommandParameter="slow motion 60fps" Padding="6,2" FontSize="10" Style="{ThemeResource DefaultButtonStyle}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{x:Bind ViewModel.EnhancedPrompt, Mode=OneWay}" FontSize="11" Foreground="{StaticResource AccentCyberCyanBrush}" FontStyle="Italic" TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
-                        <Button Command="{x:Bind ViewModel.EnhanceVideoPromptCommand}" Style="{ThemeResource DefaultButtonStyle}">
+                    <!-- Video Actions & Resolution -->
+                    <StackPanel Grid.Column="1" Spacing="10" VerticalAlignment="Center">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Content="1080p @ 30fps" Command="{x:Bind ViewModel.SetResolutionCommand}" CommandParameter="1080p" HorizontalAlignment="Stretch" Style="{ThemeResource DefaultButtonStyle}" FontFamily="Consolas" FontSize="11" />
+                            <Button Grid.Column="1" Content="4K UHD @ 60fps" Command="{x:Bind ViewModel.SetResolutionCommand}" CommandParameter="4K" HorizontalAlignment="Stretch" Style="{ThemeResource DefaultButtonStyle}" FontFamily="Consolas" FontSize="11" />
+                        </Grid>
+
+                        <Button Command="{x:Bind ViewModel.EnhanceVideoPromptCommand}" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Height="36">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE768;" FontSize="12" Foreground="#8B5CF6" />
-                                <TextBlock Text="✨ Enhance Prompt" />
+                                <FontIcon Glyph="&#xE768;" FontSize="12" Foreground="{StaticResource AccentElectricVioletBrush}" />
+                                <TextBlock Text="✨ Enhance Cinematographic Prompt" FontSize="12" />
                             </StackPanel>
                         </Button>
-                        <Button Command="{x:Bind ViewModel.GenerateVideoCommand}" Style="{ThemeResource AccentButtonStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE714;" FontSize="12" />
-                                <TextBlock Text="Generate 1080p Video" FontWeight="SemiBold" />
+
+                        <Button Command="{x:Bind ViewModel.GenerateVideoCommand}" Style="{ThemeResource AccentButtonStyle}" HorizontalAlignment="Stretch" Height="38">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE714;" FontSize="13" />
+                                <TextBlock Text="Dispatch 1080p Video Job" FontWeight="Bold" FontSize="12" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

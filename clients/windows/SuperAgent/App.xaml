@@ -7,12 +7,35 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
             
+            <!-- Core Cybernetic Obsidian Design Tokens -->
+            <SolidColorBrush x:Key="ObsidianDeepBrush" Color="#080B11" />
+            <SolidColorBrush x:Key="ElevatedCardBrush" Color="#0F141F" />
+            <SolidColorBrush x:Key="ElevatedCardHoverBrush" Color="#171F2F" />
+            <SolidColorBrush x:Key="StageTerminalBrush" Color="#06080D" />
+            <SolidColorBrush x:Key="BorderSubtleBrush" Color="#1E283D" />
+            <SolidColorBrush x:Key="BorderGlowBrush" Color="#2D3D5E" />
+            
+            <SolidColorBrush x:Key="AccentCyberCyanBrush" Color="#06B6D4" />
+            <SolidColorBrush x:Key="AccentCyanGlowBrush" Color="#22D3EE" />
+            <SolidColorBrush x:Key="AccentElectricVioletBrush" Color="#8B5CF6" />
+            <SolidColorBrush x:Key="AccentVioletGlowBrush" Color="#A78BFA" />
+            <SolidColorBrush x:Key="AccentAmberEmberBrush" Color="#F59E0B" />
+            <SolidColorBrush x:Key="StatusEmeraldBrush" Color="#10B981" />
+            <SolidColorBrush x:Key="StatusCrimsonBrush" Color="#EF4444" />
+
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#64748B" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#94A3B8" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F8FAFC" />
+
             <!-- Custom Brushes & Accent Styling -->
-            <SolidColorBrush x:Key="SuperAgentAccentBrush" Color="#6366F1" />
-            <SolidColorBrush x:Key="UserMessageBackgroundBrush" Color="#4F46E5" />
-            <SolidColorBrush x:Key="AssistantMessageBackgroundBrush" Color="#27272A" />
+            <SolidColorBrush x:Key="SuperAgentAccentBrush" Color="#06B6D4" />
+            <SolidColorBrush x:Key="UserMessageBackgroundBrush" Color="#1E1B4B" />
+            <SolidColorBrush x:Key="AssistantMessageBackgroundBrush" Color="#0F141F" />
             <CornerRadius x:Key="MessageBubbleCornerRadius">12</CornerRadius>
+            <CornerRadius x:Key="CardPillCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="BadgeCornerRadius">12</CornerRadius>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

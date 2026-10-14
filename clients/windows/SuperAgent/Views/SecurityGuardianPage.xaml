@@ -9,9 +9,9 @@
     xmlns:core="using:SuperAgent.Core"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="28,20">
-        <StackPanel MaxWidth="1100" Spacing="20">
-            <!-- Header -->
+    <ScrollViewer Padding="28,20" Background="{StaticResource ObsidianDeepBrush}">
+        <StackPanel MaxWidth="1180" Spacing="22">
+            <!-- Header & Action Strip -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -19,59 +19,77 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xEA18;" FontSize="24" Foreground="#818CF8" VerticalAlignment="Center" />
-                        <TextBlock Text="Security Guardian &amp; LockScreen Vault" FontSize="26" FontWeight="SemiBold" />
+                        <FontIcon Glyph="&#xEA18;" FontSize="24" Foreground="{StaticResource StatusEmeraldBrush}" VerticalAlignment="Center" />
+                        <TextBlock Text="Security Guardian &amp; LockScreen Vault" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
                     </StackPanel>
-                    <TextBlock Text="4-tier confirmation governance, 16 zo decision vectors, and hardware scrypt key recovery." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="4-tier confirmation governance, CUALockScreen watchdog (WTS_SESSION_LOCK), 16 zo decision vectors, and credential vault." Foreground="{StaticResource TextSecondaryBrush}" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Click="OpenDialogButton_Click" Style="{ThemeResource AccentButtonStyle}">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Button Click="OpenDialogButton_Click" Style="{ThemeResource AccentButtonStyle}" Padding="16,8">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE7BA;" FontSize="12" />
-                            <TextBlock Text="Test Dialog Popup" />
+                            <TextBlock Text="Launch Confirmation Modal" FontWeight="SemiBold" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>
 
-            <!-- Feedback Banner -->
-            <Border Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="8" Padding="12,8">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="#818CF8" />
-                    <TextBlock Text="{x:Bind ViewModel.ActionFeedback, Mode=OneWay}" FontSize="12" FontWeight="Medium" />
-                </StackPanel>
+            <!-- Feedback Telemetry Strip -->
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="14,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Ellipse Width="8" Height="8" Fill="{StaticResource AccentCyberCyanBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.ActionFeedback, Mode=OneWay}" FontSize="12" FontWeight="Medium" Foreground="{StaticResource TextPrimaryBrush}" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Background="#064E3B" CornerRadius="4" Padding="6,2">
+                        <TextBlock Text="Hardware scrypt Active" FontSize="10" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource StatusEmeraldBrush}" />
+                    </Border>
+                </Grid>
             </Border>
 
-            <!-- LockScreen Guardian Shield Banner -->
-            <Border Background="#1E1B4B" BorderThickness="1" BorderBrush="#6366F1" CornerRadius="10" Padding="18,14">
-                <Grid ColumnSpacing="16">
+            <!-- CUALockScreen Guardian Shield Banner -->
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource AccentElectricVioletBrush}" CornerRadius="12" Padding="20,16">
+                <Grid ColumnSpacing="18">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xEA18;" FontSize="32" Foreground="#818CF8" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Text="{x:Bind ViewModel.ShieldStatus, Mode=OneWay}" FontWeight="SemiBold" FontSize="15" Foreground="#EEF2FF" />
-                        <TextBlock Text="Hardware-enforced scrypt key storage + zero-leak memory isolation. Intercepts untrusted clipboard and terminal escalations." FontSize="12" Foreground="#C7D2FE" />
+                    <Border Background="#1E1B4B" CornerRadius="10" Padding="12" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xEA18;" FontSize="32" Foreground="{StaticResource AccentVioletGlowBrush}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{x:Bind ViewModel.ShieldStatus, Mode=OneWay}" FontWeight="Bold" FontSize="15" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <Border Background="#083344" CornerRadius="4" Padding="6,1">
+                                <TextBlock Text="{x:Bind ViewModel.WtsSessionStatus, Mode=OneWay}" FontSize="10" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="Continuous Win32 WTSRegisterSessionNotification watchdog. Automatically freezes synthetic mouse &amp; keyboard injection upon desktop lock (Win+L / UAC screen)." FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
                     </StackPanel>
-                    <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsLockScreenArmed, Mode=TwoWay}" OnContent="Armed" OffContent="Disarmed" VerticalAlignment="Center" />
+                    <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsLockScreenArmed, Mode=TwoWay}" OnContent="Watchdog: Armed" OffContent="Watchdog: Disarmed" VerticalAlignment="Center" />
                 </Grid>
             </Border>
 
-            <!-- 4-Tier Confirmation Governance -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="10" Padding="16">
-                <StackPanel Spacing="12">
+            <!-- 4-Tier Confirmation Governance Deck -->
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="12" Padding="18">
+                <StackPanel Spacing="14">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="2">
-                            <TextBlock Text="4-Tier Confirmation Governance" FontWeight="SemiBold" FontSize="16" />
-                            <TextBlock Text="Adaptive safety gating for autonomous agent execution and system modification." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="4-Tier Confirmation Governance Taxonomy" FontWeight="SemiBold" FontSize="16" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="Multi-level authorization gating dynamically adapted based on command blast radius." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
-                        <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.ActiveTier, Mode=OneWay}" FontWeight="Bold" FontSize="13" Foreground="#818CF8" VerticalAlignment="Center" />
+                        <Border Grid.Column="1" Background="#1E1B4B" CornerRadius="6" Padding="10,4" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind ViewModel.ActiveTierTitle, Mode=OneWay}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource AccentVioletGlowBrush}" />
+                        </Border>
                     </Grid>
 
                     <Grid ColumnSpacing="12">
@@ -81,36 +99,48 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="0" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Padding="12,10">
+                        <Button Grid.Column="0" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="0" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Padding="14,12" Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource BorderSubtleBrush}">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Tier 0: Hand-Off" FontWeight="Bold" FontSize="12" />
-                                <TextBlock Text="Read-only observation. Requires confirmation on every action." FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Width="8" Height="8" CornerRadius="4" Background="{StaticResource StatusCrimsonBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Mode 1: Hand-Off" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="Mandates human takeover for all write commands, payments, password resets." FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Button>
-                        <Button Grid.Column="1" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="1" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Padding="12,10">
+                        <Button Grid.Column="1" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="1" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Padding="14,12" Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource BorderSubtleBrush}">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Tier 1: Always Confirm" FontWeight="Bold" FontSize="12" />
-                                <TextBlock Text="Interactive prompt for write commands and tab switches." FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Width="8" Height="8" CornerRadius="4" Background="{StaticResource AccentAmberEmberBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Mode 2: Always Confirm" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="Modal confirmation required for financial transfers, shell executions, file deletions." FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Button>
-                        <Button Grid.Column="2" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="2" Style="{ThemeResource AccentButtonStyle}" HorizontalAlignment="Stretch" Padding="12,10">
+                        <Button Grid.Column="2" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="2" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Padding="14,12" Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource AccentCyberCyanBrush}">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Tier 2: Pre-Approval" FontWeight="Bold" FontSize="12" />
-                                <TextBlock Text="Pre-authorize planned steps; prompt on security deviations." FontSize="10" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Width="8" Height="8" CornerRadius="4" Background="{StaticResource AccentCyberCyanBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Mode 3: Pre-Approval" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="Pre-authorizes planned execution steps; dynamically halts upon scope escalation." FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Button>
-                        <Button Grid.Column="3" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="3" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Padding="12,10">
+                        <Button Grid.Column="3" Command="{x:Bind ViewModel.SetTierCommand}" CommandParameter="3" Style="{ThemeResource DefaultButtonStyle}" HorizontalAlignment="Stretch" Padding="14,12" Background="{StaticResource StageTerminalBrush}" BorderBrush="{StaticResource BorderSubtleBrush}">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Tier 3: Autonomous" FontWeight="Bold" FontSize="12" />
-                                <TextBlock Text="High-trust unattended loop with zo runtime safety bounds." FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Width="8" Height="8" CornerRadius="4" Background="{StaticResource StatusEmeraldBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Mode 4: No Confirm" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="Autonomous execution with zero prompts for benign dismissals and cookie banners." FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Button>
                     </Grid>
                 </StackPanel>
             </Border>
 
-            <!-- zo Security Decision Badges (16-State Policy) -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="10" Padding="16">
+            <!-- Cross-Origin Iframe Credential Validator -->
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="12" Padding="18">
                 <StackPanel Spacing="12">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -118,28 +148,75 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="2">
-                            <TextBlock Text="zo Security Decision Badges (16-State Policy Vectors)" FontWeight="SemiBold" FontSize="16" />
-                            <TextBlock Text="Deterministic behavioral constraint rules enforced before each tool invocation." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Cross-Origin Iframe &amp; Credential Delivery Validator" FontWeight="SemiBold" FontSize="16" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="Prevents credential harvesting via embedded unauthorized iframe targets." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
-                        <TextBlock Grid.Column="1" Text="Rule zo-04 Active" FontSize="11" FontWeight="Bold" Foreground="#EF4444" VerticalAlignment="Center" />
+                        <Border Grid.Column="1" Background="#450A0A" CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
+                            <TextBlock Text="⚠️ Cross-Origin Mismatch Detected" FontSize="11" FontWeight="Bold" Foreground="{StaticResource StatusCrimsonBrush}" />
+                        </Border>
+                    </Grid>
+
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Background="{StaticResource StageTerminalBrush}" CornerRadius="8" Padding="12" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Top-Level Document Origin" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.TopLevelOrigin, Mode=OneWay}" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource AccentCyanGlowBrush}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Background="{StaticResource StageTerminalBrush}" CornerRadius="8" Padding="12" BorderThickness="1" BorderBrush="{StaticResource StatusCrimsonBrush}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Credential Frame Target Origin" FontSize="11" Foreground="{StaticResource StatusCrimsonBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.CredentialFrameOrigin, Mode=OneWay}" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource StatusCrimsonBrush}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Background="{StaticResource StageTerminalBrush}" CornerRadius="8" Padding="12" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Form Submission Action" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.FormSubmissionOrigin, Mode=OneWay}" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- zo Security Decision Badges (16-State Policy Vectors) -->
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="12" Padding="18">
+                <StackPanel Spacing="14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="zo Security Decision Machine (16-State Policy Vectors)" FontWeight="SemiBold" FontSize="16" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock Text="Deterministic behavioral constraint rules evaluated before each tool invocation." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#083344" CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
+                            <TextBlock Text="16 Vectors Loaded" FontSize="10" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" />
+                        </Border>
                     </Grid>
 
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Badges}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="8" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="core:ZoSecurityDecisionBadge">
                                     <Button Command="{Binding ElementName=ThisPage, Path=ViewModel.SelectBadgeCommand}" CommandParameter="{Binding}" Padding="0" BorderThickness="0" Background="Transparent">
-                                        <Border CornerRadius="6" Padding="10,6" Background="{ThemeResource LayerFillColorAltBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Ellipse Width="8" Height="8" Fill="#10B981" />
-                                                <StackPanel Spacing="1">
-                                                    <TextBlock Text="{x:Bind Label}" FontSize="11" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{x:Bind Severity}" FontSize="9" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Border CornerRadius="8" Padding="12,8" Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}">
+                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                <Ellipse Width="8" Height="8" Fill="{StaticResource StatusEmeraldBrush}" />
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="{x:Bind Label}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                                    <TextBlock Text="{x:Bind Severity}" FontSize="9" FontFamily="Consolas" Foreground="{StaticResource AccentCyanGlowBrush}" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
@@ -152,10 +229,10 @@
             </Border>
 
             <!-- Credential Vault 7-Branch Recovery Protocols -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="10" Padding="16">
-                <StackPanel Spacing="12">
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="12" Padding="18">
+                <StackPanel Spacing="14">
                     <StackPanel Spacing="2">
-                        <TextBlock Text="Credential Vault 7-Branch Recovery Protocols" FontWeight="SemiBold" FontSize="16" />
+                        <TextBlock Text="Credential Vault 7-Branch Recovery Protocols" FontWeight="SemiBold" FontSize="16" Foreground="{StaticResource TextPrimaryBrush}" />
                         <TextBlock Text="Hardware-isolated token rotation and zero-leak recovery runbooks." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
 
@@ -165,22 +242,24 @@
                         SelectionMode="Single">
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="core:CredentialRecoveryBranch">
-                                <Grid Padding="8,8" ColumnSpacing="14">
+                                <Grid Padding="12,10" Margin="0,3" CornerRadius="8" Background="{StaticResource ElevatedCardHoverBrush}" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="90" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border CornerRadius="4" Padding="6,3" Background="{ThemeResource LayerFillColorAltBrush}" HorizontalAlignment="Left">
-                                        <TextBlock Text="{x:Bind BranchId}" FontSize="11" FontWeight="Bold" Foreground="#8B5CF6" />
+                                    <Border CornerRadius="4" Padding="8,3" Background="#1E1B4B" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind BranchId}" FontSize="11" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource AccentVioletGlowBrush}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Bind ActionName}" FontWeight="SemiBold" FontSize="13" />
-                                        <TextBlock Text="{x:Bind ProtocolSummary}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{x:Bind ActionName}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <TextBlock Text="{x:Bind ProtocolSummary}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{x:Bind RiskRating}" FontSize="11" FontWeight="SemiBold" Foreground="#F59E0B" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                    <Button Grid.Column="3" Content="Execute" Style="{ThemeResource DefaultButtonStyle}" VerticalAlignment="Center" />
+                                    <Border Grid.Column="2" Background="#451A03" CornerRadius="4" Padding="6,2" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="{x:Bind RiskRating}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentAmberEmberBrush}" />
+                                    </Border>
+                                    <Button Grid.Column="3" Content="Execute Branch" Style="{ThemeResource AccentButtonStyle}" Padding="12,5" VerticalAlignment="Center" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>

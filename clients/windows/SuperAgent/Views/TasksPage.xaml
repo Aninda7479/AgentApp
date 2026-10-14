@@ -1,4 +1,5 @@
 <Page
+    x:Name="ThisTasksPage"
     x:Class="SuperAgent.Views.TasksPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -8,49 +9,69 @@
     xmlns:core="using:SuperAgent.Core"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="28,20">
-        <StackPanel MaxWidth="1100" Spacing="20">
-            <!-- Header -->
+    <ScrollViewer Padding="28,20" Background="{StaticResource ObsidianDeepBrush}">
+        <StackPanel MaxWidth="1180" Spacing="22">
+            <!-- Header & Real-Time Sync Status -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Tasks &amp; Scheduled Routines" FontSize="26" FontWeight="SemiBold" />
-                    <TextBlock Text="4-column autonomous agent Kanban board, cron routines with Telegram alerts, and webhook triggers." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE823;" FontSize="24" Foreground="{StaticResource AccentCyberCyanBrush}" VerticalAlignment="Center" />
+                        <TextBlock Text="Autonomous Engineering Tasks &amp; Scheduled Routines" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                    </StackPanel>
+                    <TextBlock Text="4-column cybernetic Kanban pipeline, 5-field cron routines with Telegram alert dispatch, and execution telemetry." Foreground="{StaticResource TextSecondaryBrush}" />
                 </StackPanel>
-                <Border Grid.Column="1" Background="{ThemeResource LayerFillColorAltBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="12,6" VerticalAlignment="Center">
-                    <TextBlock Text="{x:Bind ViewModel.FeedbackMessage, Mode=OneWay}" FontSize="12" FontWeight="Medium" />
+                <Border Grid.Column="1" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="14,8" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="8" Height="8" Fill="{StaticResource StatusEmeraldBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.FeedbackMessage, Mode=OneWay}" FontSize="12" FontWeight="Medium" Foreground="{StaticResource TextPrimaryBrush}" />
+                    </StackPanel>
                 </Border>
             </Grid>
 
             <!-- Quick Add Task Bar -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="10" Padding="14">
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="10" Padding="16">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="180" />
+                        <ColumnDefinition Width="170" />
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="150" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBox Text="{x:Bind ViewModel.NewTaskTitle, Mode=TwoWay}" PlaceholderText="Enter new agent task (e.g. Audit dependencies)..." />
-                    <ComboBox Grid.Column="1" SelectedValue="{x:Bind ViewModel.NewTaskPersona, Mode=TwoWay}" SelectedValuePath="Content" HorizontalAlignment="Stretch">
+                    
+                    <TextBox Text="{x:Bind ViewModel.NewTaskTitle, Mode=TwoWay}" PlaceholderText="Enter engineering task (e.g. Audit cargo dependencies for CVEs)..." VerticalAlignment="Center" />
+                    
+                    <ComboBox Grid.Column="1" SelectedValue="{x:Bind ViewModel.NewTaskPersona, Mode=TwoWay}" SelectedValuePath="Content" HorizontalAlignment="Stretch" VerticalAlignment="Center">
                         <ComboBoxItem Content="Code Janitor" />
                         <ComboBoxItem Content="Windows Specialist" />
                         <ComboBoxItem Content="Security Guardian" />
                         <ComboBoxItem Content="Hardware Co-Pilot" />
                     </ComboBox>
-                    <Button Grid.Column="2" Command="{x:Bind ViewModel.AddTaskCommand}" Style="{ThemeResource AccentButtonStyle}">
+
+                    <ComboBox Grid.Column="2" SelectedValue="{x:Bind ViewModel.NewTaskPriority, Mode=TwoWay}" SelectedValuePath="Content" HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                        <ComboBoxItem Content="High" />
+                        <ComboBoxItem Content="Medium" />
+                        <ComboBoxItem Content="Critical" />
+                        <ComboBoxItem Content="Low" />
+                    </ComboBox>
+
+                    <TextBox Grid.Column="3" Text="{x:Bind ViewModel.NewTaskTag, Mode=TwoWay}" PlaceholderText="Tag (e.g. Core v2)" VerticalAlignment="Center" />
+
+                    <Button Grid.Column="4" Command="{x:Bind ViewModel.AddTaskCommand}" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Center" Padding="16,8">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE710;" FontSize="12" />
-                            <TextBlock Text="Add Task" FontWeight="SemiBold" />
+                            <TextBlock Text="Queue Task" FontWeight="SemiBold" />
                         </StackPanel>
                     </Button>
                 </Grid>
             </Border>
 
-            <!-- 4-Column Kanban Board -->
-            <Grid ColumnSpacing="12">
+            <!-- 4-Column Cybernetic Kanban Board -->
+            <Grid ColumnSpacing="14">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
@@ -59,29 +80,41 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Col 1: To Do -->
-                <Border Grid.Column="0" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="10" Padding="12">
-                    <StackPanel Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#6366F1" VerticalAlignment="Center" />
-                            <TextBlock Text="To Do" FontWeight="Bold" FontSize="13" />
-                            <TextBlock Text="{x:Bind ViewModel.ToDoCards.Count, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        <ListView ItemsSource="{x:Bind ViewModel.ToDoCards}">
+                <Border Grid.Column="0" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="10" Padding="14">
+                    <StackPanel Spacing="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="10" Height="10" CornerRadius="5" Background="{StaticResource AccentElectricVioletBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="To Do" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#1E1B4B" CornerRadius="10" Padding="8,2">
+                                <TextBlock Text="{x:Bind ViewModel.ToDoCards.Count, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentVioletGlowBrush}" />
+                            </Border>
+                        </Grid>
+                        <ListView ItemsSource="{x:Bind ViewModel.ToDoCards}" SelectionMode="None">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="core:KanbanCard">
-                                    <Border Margin="0,0,0,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="10">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
-                                            <TextBlock Text="{x:Bind Description}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <Grid Margin="0,4,0,0">
+                                    <Border Margin="0,0,0,10" Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="12">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}" />
+                                            <TextBlock Text="{x:Bind Description}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                                            <Grid Margin="0,6,0,0">
                                                 <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <Border CornerRadius="3" Padding="4,1" Background="#1E1B4B" HorizontalAlignment="Left">
-                                                    <TextBlock Text="{x:Bind Priority}" FontSize="9" FontWeight="Bold" Foreground="#818CF8" />
+                                                <Border CornerRadius="4" Padding="6,2" Background="#1E1B4B">
+                                                    <TextBlock Text="{x:Bind Priority}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentVioletGlowBrush}" />
                                                 </Border>
-                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="9" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="10" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                <Button Grid.Column="2" Command="{Binding Path=DataContext.MoveCardNextCommand, ElementName=ThisTasksPage}" CommandParameter="{Binding}" Padding="6,2" Style="{ThemeResource DefaultButtonStyle}" ToolTipService.ToolTip="Advance to In Progress">
+                                                    <FontIcon Glyph="&#xE76C;" FontSize="10" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                                </Button>
                                             </Grid>
                                         </StackPanel>
                                     </Border>
@@ -92,29 +125,41 @@
                 </Border>
 
                 <!-- Col 2: In Progress -->
-                <Border Grid.Column="1" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="10" Padding="12">
-                    <StackPanel Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#06B6D4" VerticalAlignment="Center" />
-                            <TextBlock Text="In Progress" FontWeight="Bold" FontSize="13" />
-                            <TextBlock Text="{x:Bind ViewModel.InProgressCards.Count, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        <ListView ItemsSource="{x:Bind ViewModel.InProgressCards}">
+                <Border Grid.Column="1" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="10" Padding="14">
+                    <StackPanel Spacing="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="10" Height="10" CornerRadius="5" Background="{StaticResource AccentCyberCyanBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="In Progress" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#083344" CornerRadius="10" Padding="8,2">
+                                <TextBlock Text="{x:Bind ViewModel.InProgressCards.Count, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" />
+                            </Border>
+                        </Grid>
+                        <ListView ItemsSource="{x:Bind ViewModel.InProgressCards}" SelectionMode="None">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="core:KanbanCard">
-                                    <Border Margin="0,0,0,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="10">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
-                                            <TextBlock Text="{x:Bind Description}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <Grid Margin="0,4,0,0">
+                                    <Border Margin="0,0,0,10" Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource AccentCyberCyanBrush}" CornerRadius="8" Padding="12">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}" />
+                                            <TextBlock Text="{x:Bind Description}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                                            <Grid Margin="0,6,0,0">
                                                 <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <Border CornerRadius="3" Padding="4,1" Background="#083344" HorizontalAlignment="Left">
-                                                    <TextBlock Text="{x:Bind Priority}" FontSize="9" FontWeight="Bold" Foreground="#38BDF8" />
+                                                <Border CornerRadius="4" Padding="6,2" Background="#083344">
+                                                    <TextBlock Text="{x:Bind Priority}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" />
                                                 </Border>
-                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="9" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="10" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                <Button Grid.Column="2" Command="{Binding Path=DataContext.MoveCardNextCommand, ElementName=ThisTasksPage}" CommandParameter="{Binding}" Padding="6,2" Style="{ThemeResource DefaultButtonStyle}" ToolTipService.ToolTip="Advance to Blocked / Review">
+                                                    <FontIcon Glyph="&#xE76C;" FontSize="10" Foreground="{StaticResource AccentAmberEmberBrush}" />
+                                                </Button>
                                             </Grid>
                                         </StackPanel>
                                     </Border>
@@ -125,29 +170,41 @@
                 </Border>
 
                 <!-- Col 3: Blocked / Review -->
-                <Border Grid.Column="2" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="10" Padding="12">
-                    <StackPanel Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#F59E0B" VerticalAlignment="Center" />
-                            <TextBlock Text="Blocked / Review" FontWeight="Bold" FontSize="13" />
-                            <TextBlock Text="{x:Bind ViewModel.BlockedCards.Count, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        <ListView ItemsSource="{x:Bind ViewModel.BlockedCards}">
+                <Border Grid.Column="2" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="10" Padding="14">
+                    <StackPanel Spacing="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="10" Height="10" CornerRadius="5" Background="{StaticResource AccentAmberEmberBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="Blocked / Review" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#451A03" CornerRadius="10" Padding="8,2">
+                                <TextBlock Text="{x:Bind ViewModel.BlockedCards.Count, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="#FBBF24" />
+                            </Border>
+                        </Grid>
+                        <ListView ItemsSource="{x:Bind ViewModel.BlockedCards}" SelectionMode="None">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="core:KanbanCard">
-                                    <Border Margin="0,0,0,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="10">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
-                                            <TextBlock Text="{x:Bind Description}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <Grid Margin="0,4,0,0">
+                                    <Border Margin="0,0,0,10" Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="12">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}" />
+                                            <TextBlock Text="{x:Bind Description}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                                            <Grid Margin="0,6,0,0">
                                                 <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <Border CornerRadius="3" Padding="4,1" Background="#451A03" HorizontalAlignment="Left">
+                                                <Border CornerRadius="4" Padding="6,2" Background="#451A03">
                                                     <TextBlock Text="{x:Bind Priority}" FontSize="9" FontWeight="Bold" Foreground="#FBBF24" />
                                                 </Border>
-                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="9" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="10" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
+                                                <Button Grid.Column="2" Command="{Binding Path=DataContext.MoveCardNextCommand, ElementName=ThisTasksPage}" CommandParameter="{Binding}" Padding="6,2" Style="{ThemeResource DefaultButtonStyle}" ToolTipService.ToolTip="Advance to Done">
+                                                    <FontIcon Glyph="&#xE76C;" FontSize="10" Foreground="{StaticResource StatusEmeraldBrush}" />
+                                                </Button>
                                             </Grid>
                                         </StackPanel>
                                     </Border>
@@ -158,29 +215,37 @@
                 </Border>
 
                 <!-- Col 4: Done -->
-                <Border Grid.Column="3" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="10" Padding="12">
-                    <StackPanel Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="#10B981" VerticalAlignment="Center" />
-                            <TextBlock Text="Done" FontWeight="Bold" FontSize="13" />
-                            <TextBlock Text="{x:Bind ViewModel.DoneCards.Count, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        <ListView ItemsSource="{x:Bind ViewModel.DoneCards}">
+                <Border Grid.Column="3" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="10" Padding="14">
+                    <StackPanel Spacing="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="10" Height="10" CornerRadius="5" Background="{StaticResource StatusEmeraldBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="Done" FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#064E3B" CornerRadius="10" Padding="8,2">
+                                <TextBlock Text="{x:Bind ViewModel.DoneCards.Count, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource StatusEmeraldBrush}" />
+                            </Border>
+                        </Grid>
+                        <ListView ItemsSource="{x:Bind ViewModel.DoneCards}" SelectionMode="None">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="core:KanbanCard">
-                                    <Border Margin="0,0,0,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="10">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
-                                            <TextBlock Text="{x:Bind Description}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <Grid Margin="0,4,0,0">
+                                    <Border Margin="0,0,0,10" Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="12">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}" />
+                                            <TextBlock Text="{x:Bind Description}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                                            <Grid Margin="0,6,0,0">
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
-                                                <Border CornerRadius="3" Padding="4,1" Background="#064E3B" HorizontalAlignment="Left">
-                                                    <TextBlock Text="Completed" FontSize="9" FontWeight="Bold" Foreground="#6EE7B7" />
+                                                <Border CornerRadius="4" Padding="6,2" Background="#064E3B">
+                                                    <TextBlock Text="Completed" FontSize="9" FontWeight="Bold" Foreground="{StaticResource StatusEmeraldBrush}" />
                                                 </Border>
-                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="9" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind AssignedPersona}" FontSize="10" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
                                             </Grid>
                                         </StackPanel>
                                     </Border>
@@ -191,43 +256,160 @@
                 </Border>
             </Grid>
 
-            <!-- Cron Routines Deck -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="12" Padding="16">
-                <StackPanel Spacing="12">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE823;" FontSize="16" Foreground="#8B5CF6" />
-                        <TextBlock Text="Scheduled Automations &amp; Telegram Routines" FontWeight="SemiBold" FontSize="15" />
-                    </StackPanel>
+            <!-- Cron Routines Deck & Preset Quick Selectors -->
+            <Border Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="12" Padding="18">
+                <StackPanel Spacing="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE823;" FontSize="18" Foreground="{StaticResource AccentElectricVioletBrush}" />
+                            <TextBlock Text="Autonomous Cron Routines &amp; Telegram Gateway" FontWeight="SemiBold" FontSize="16" Foreground="{StaticResource TextPrimaryBrush}" />
+                        </StackPanel>
+                        <!-- Preset Pill Buttons -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <Button Command="{x:Bind ViewModel.ApplyPresetCommand}" CommandParameter="hourly" Content="Hourly" FontSize="11" Padding="8,4" />
+                            <Button Command="{x:Bind ViewModel.ApplyPresetCommand}" CommandParameter="daily" Content="Daily (2 AM)" FontSize="11" Padding="8,4" />
+                            <Button Command="{x:Bind ViewModel.ApplyPresetCommand}" CommandParameter="weekdays" Content="Weekdays (9 AM)" FontSize="11" Padding="8,4" />
+                            <Button Command="{x:Bind ViewModel.ApplyPresetCommand}" CommandParameter="heartbeat" Content="15-Min Heartbeat" FontSize="11" Padding="8,4" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Add New Routine Form -->
+                    <Border Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="14">
+                        <Grid ColumnSpacing="12" RowSpacing="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="160" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Text="{x:Bind ViewModel.NewRoutineName, Mode=TwoWay}" PlaceholderText="Routine name..." />
+                            <TextBox Grid.Column="1" Text="{x:Bind ViewModel.SelectedCronExpression, Mode=TwoWay}" FontFamily="Consolas" PlaceholderText="Cron (0 9 * * 1-5)" />
+                            <TextBox Grid.Column="2" Text="{x:Bind ViewModel.NewRoutinePrompt, Mode=TwoWay}" PlaceholderText="Agent instruction prompt template..." />
+                            
+                            <Button Grid.Column="3" Command="{x:Bind ViewModel.AddRoutineCommand}" Style="{ThemeResource AccentButtonStyle}" Padding="16,6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE710;" FontSize="11" />
+                                    <TextBlock Text="Register Routine" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Sub-row: Preview & Telegram settings -->
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Orientation="Horizontal" Spacing="16">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE946;" FontSize="11" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                    <TextBlock Text="{x:Bind ViewModel.CronSyntaxPreview, Mode=OneWay}" FontSize="11" FontFamily="Consolas" Foreground="{StaticResource AccentCyanGlowBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch IsOn="{x:Bind ViewModel.RoutineTelegramAlert, Mode=TwoWay}" OffContent="Telegram: Off" OnContent="Telegram: On" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                <TextBox Text="{x:Bind ViewModel.RoutineTelegramChat, Mode=TwoWay}" PlaceholderText="@chat_id" Width="140" FontSize="11" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Routines List -->
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Routines}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="core:CronRoutine">
-                                <Border Margin="0,0,0,8" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="8" Padding="12">
-                                    <Grid ColumnSpacing="12">
+                                <Border Margin="0,0,0,8" Background="{StaticResource ElevatedCardHoverBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="14">
+                                    <Grid ColumnSpacing="14">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="3">
-                                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="13" />
-                                            <TextBlock Text="{x:Bind PromptTemplate}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                                                <Border CornerRadius="3" Padding="6,2" Background="#1E1B4B">
-                                                    <TextBlock Text="{x:Bind CronExpression}" FontSize="10" FontFamily="Consolas" Foreground="#818CF8" />
+                                        <StackPanel Spacing="4">
+                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" />
+                                                <Border CornerRadius="4" Padding="6,1" Background="#1E1B4B">
+                                                    <TextBlock Text="{x:Bind PresetName}" FontSize="9" FontWeight="Medium" Foreground="{StaticResource AccentVioletGlowBrush}" />
                                                 </Border>
-                                                <TextBlock Text="{x:Bind PresetName}" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
-                                                <TextBlock Text="{x:Bind TelegramChatId}" FontSize="10" Foreground="#06B6D4" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <TextBlock Text="{x:Bind PromptTemplate}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                                            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,4,0,0">
+                                                <Border CornerRadius="4" Padding="8,2" Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <FontIcon Glyph="&#xE823;" FontSize="10" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                                        <TextBlock Text="{x:Bind CronExpression}" FontSize="10" FontFamily="Consolas" Foreground="{StaticResource AccentCyanGlowBrush}" />
+                                                    </StackPanel>
+                                                </Border>
+                                                <Border CornerRadius="4" Padding="6,2" Background="#083344">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <FontIcon Glyph="&#xE8BD;" FontSize="10" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                                        <TextBlock Text="{x:Bind TelegramChatId}" FontSize="10" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                                    </StackPanel>
+                                                </Border>
+                                                <TextBlock Text="{x:Bind WebhookUrl}" FontSize="10" FontFamily="Consolas" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
                                             </StackPanel>
                                         </StackPanel>
-                                        <ToggleSwitch Grid.Column="1" IsOn="{x:Bind IsEnabled}" VerticalAlignment="Center" />
-                                        <Button Grid.Column="2" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Center">
-                                            <TextBlock Text="Run Now" FontSize="11" />
+
+                                        <ToggleSwitch Grid.Column="1" IsOn="{x:Bind IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                        
+                                        <Button Grid.Column="2" Command="{Binding Path=DataContext.TriggerRoutineNowCommand, ElementName=ThisTasksPage}" CommandParameter="{Binding}" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Center" Padding="12,6">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE768;" FontSize="11" />
+                                                <TextBlock Text="Run Now" FontSize="11" FontWeight="SemiBold" />
+                                            </StackPanel>
                                         </Button>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Execution Log Drawer (Collapsible Obsidian Terminal) -->
+                    <Border Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8" Padding="14">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Ellipse Width="6" Height="6" Fill="{StaticResource StatusEmeraldBrush}" />
+                                    <TextBlock Text="Execution Log Drawer &amp; Daemon Telemetry Stream" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                    <Border Background="#064E3B" CornerRadius="4" Padding="6,1" Margin="6,0,0,0">
+                                        <TextBlock Text="Online (:1469)" FontSize="9" FontWeight="Bold" Foreground="{StaticResource StatusEmeraldBrush}" />
+                                    </Border>
+                                </StackPanel>
+
+                                <Button Grid.Column="1" Command="{x:Bind ViewModel.ClearExecutionLogsCommand}" Style="{ThemeResource DefaultButtonStyle}" FontSize="10" Padding="8,3" Margin="0,0,8,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="10" />
+                                        <TextBlock Text="Clear Logs" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Grid.Column="2" Command="{x:Bind ViewModel.ToggleLogDrawerCommand}" Style="{ThemeResource DefaultButtonStyle}" FontSize="10" Padding="8,3">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <FontIcon Glyph="&#xE70E;" FontSize="10" />
+                                        <TextBlock Text="Toggle Drawer" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+
+                            <!-- Log Stream lines -->
+                            <Border Background="#030508" BorderThickness="1" BorderBrush="#0D1524" CornerRadius="6" Padding="12" MaxHeight="180">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{x:Bind ViewModel.ExecutionLogs}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{x:Bind}" FontFamily="Consolas" FontSize="11" Foreground="#38BDF8" Margin="0,2" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Border>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
         </StackPanel>

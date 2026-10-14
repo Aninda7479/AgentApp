@@ -35,6 +35,9 @@ public record WindowTargetItem
     [JsonIgnore]
     public string OcclusionStatus => IsOccluded ? "Occluded" : "Visible";
 
+    [JsonIgnore]
+    public string HwndHex => $"0x{Hwnd:X8}";
+
     [JsonPropertyName("bounds")]
     public string Bounds { get; init; } = "1920x1080+0+0";
 }
@@ -226,6 +229,12 @@ public record ZoSecurityDecisionBadge
     [JsonPropertyName("label")]
     public string Label { get; init; } = string.Empty;
 
+    [JsonPropertyName("wireCode")]
+    public string WireCode { get; init; } = string.Empty;
+
+    [JsonPropertyName("decisionSource")]
+    public string DecisionSource { get; init; } = "guardian";
+
     [JsonPropertyName("severity")]
     public string Severity { get; init; } = "safe"; // safe, warning, elevated, critical
 
@@ -234,12 +243,18 @@ public record ZoSecurityDecisionBadge
 
     [JsonPropertyName("colorHex")]
     public string ColorHex { get; init; } = "#10B981";
+
+    [JsonPropertyName("retryable")]
+    public bool Retryable { get; init; }
 }
 
 public record CredentialRecoveryBranch
 {
     [JsonPropertyName("branchId")]
     public int BranchId { get; init; } // 1..7 branches
+
+    [JsonPropertyName("actionIdentifier")]
+    public string ActionIdentifier { get; init; } = string.Empty;
 
     [JsonPropertyName("actionName")]
     public string ActionName { get; init; } = string.Empty;
@@ -249,6 +264,9 @@ public record CredentialRecoveryBranch
 
     [JsonPropertyName("riskRating")]
     public string RiskRating { get; init; } = "Standard";
+
+    [JsonPropertyName("riskColor")]
+    public string RiskColor { get; init; } = "#10B981";
 
     [JsonPropertyName("isAvailable")]
     public bool IsAvailable { get; init; } = true;
@@ -263,7 +281,16 @@ public record SecurityGuardianState
     public bool IsLockScreenArmed { get; init; } = true;
 
     [JsonPropertyName("shieldStatus")]
-    public string ShieldStatus { get; init; } = "Protected (Zero Leaks)";
+    public string ShieldStatus { get; init; } = "WTS_SESSION_ACTIVE • CUALockScreenGuardian Armed (Zero Leaks)";
+
+    [JsonPropertyName("topLevelOrigin")]
+    public string TopLevelOrigin { get; init; } = "https://store.target-vendor.com";
+
+    [JsonPropertyName("credentialFrameOrigin")]
+    public string CredentialFrameOrigin { get; init; } = "https://auth.login-service.net/oauth/v2";
+
+    [JsonPropertyName("formSubmissionOrigin")]
+    public string FormSubmissionOrigin { get; init; } = "https://store.target-vendor.com/checkout/submit";
 
     [JsonPropertyName("activeDecision")]
     public ZoSecurityDecisionBadge? ActiveDecision { get; init; }
@@ -319,6 +346,12 @@ public record ReplVariableNode
     [JsonPropertyName("value")]
     public string Value { get; init; } = string.Empty;
 
+    [JsonPropertyName("memory")]
+    public string Memory { get; init; } = "1.2 KB";
+
+    [JsonPropertyName("typeColor")]
+    public string TypeColor { get; init; } = "#06B6D4";
+
     [JsonPropertyName("children")]
     public List<ReplVariableNode> Children { get; init; } = new();
 }
@@ -326,13 +359,16 @@ public record ReplVariableNode
 public record ReplConsoleState
 {
     [JsonPropertyName("totalTokens")]
-    public int TotalTokens { get; init; } = 4820;
+    public int TotalTokens { get; init; } = 3840;
 
     [JsonPropertyName("maxBufferTokens")]
     public int MaxBufferTokens { get; init; } = 25000;
 
     [JsonPropertyName("isResetPending")]
     public bool IsResetPending { get; init; }
+
+    [JsonPropertyName("engineVersion")]
+    public string EngineVersion { get; init; } = "QuickJS v2024-01-13 | Active";
 
     [JsonPropertyName("lines")]
     public List<ReplLogLine> Lines { get; init; } = new();
@@ -393,6 +429,12 @@ public record PhotoModePreset
 
     [JsonPropertyName("lightingPreset")]
     public string LightingPreset { get; init; } = "Cyberpunk Studio";
+
+    [JsonPropertyName("lightingAngle")]
+    public string LightingAngle { get; init; } = "45° Key / Rim Magenta";
+
+    [JsonPropertyName("resolution")]
+    public string Resolution { get; init; } = "3840x2160 (4K UHD)";
 }
 
 public record CompanionState
@@ -681,6 +723,12 @@ public record KanbanCard
 
     [JsonPropertyName("dueDate")]
     public string DueDate { get; init; } = "Today";
+
+    [JsonPropertyName("estimatedTokens")]
+    public string EstimatedTokens { get; init; } = "12.4k tok";
+
+    [JsonPropertyName("tag")]
+    public string Tag { get; init; } = "Rust Core";
 }
 
 public record CronRoutine
@@ -710,7 +758,7 @@ public record CronRoutine
     public string WebhookUrl { get; init; } = "http://localhost:1469/api/triggers/webhook/sec-token-77";
 
     [JsonPropertyName("isEnabled")]
-    public bool IsEnabled { get; init; } = true;
+    public bool IsEnabled { get; set; } = true;
 }
 
 public record TasksState
@@ -898,9 +946,10 @@ public static class DemoData
             },
             Tools = new List<WebMcpTool>
             {
-                new() { Name = "extractTableRows", Description = "Extracts dynamic virtualized HTML tables to CSV format", SchemaSummary = "tableSelector: string, limit: int", CallCount = 14 },
-                new() { Name = "clickDomButton", Description = "Synthesizes native mouse event chain with coordinates", SchemaSummary = "elementIndex: int, xpath: string", CallCount = 38 },
-                new() { Name = "fillInputForm", Description = "Types text with realistic human keystroke jitter", SchemaSummary = "targetId: string, value: string", CallCount = 9 }
+                new() { Name = "query_table", Description = "Extracts dynamic virtualized HTML tables to CSV/JSON format", SchemaSummary = "tableSelector: string, maxRows: int, format: string", CallCount = 24 },
+                new() { Name = "fill_checkout_form", Description = "Populates multi-step checkout forms with simulated human jitter", SchemaSummary = "formSelector: string, fields: Record<string, string>, submit: bool", CallCount = 12 },
+                new() { Name = "download_csv", Description = "Streams in-page blob and table data directly to disk without dialogs", SchemaSummary = "sourceUrl: string, destinationFilename: string", CallCount = 8 },
+                new() { Name = "clickDomButton", Description = "Synthesizes native mouse event chain with coordinates", SchemaSummary = "elementIndex: int, xpath: string", CallCount = 38 }
             },
             CdpEvents = new List<CdpStreamEvent>
             {
@@ -915,46 +964,46 @@ public static class DemoData
 
     public static SecurityGuardianState GetSecurityGuardianDemo()
     {
-        var allBadges = new List<ZoSecurityDecisionBadge>();
-        string[] labels = new[]
+        var allBadges = new List<ZoSecurityDecisionBadge>
         {
-            "Trusted Read-Only", "Local File Probe", "Subprocess Spawn", "Network Outbound",
-            "Sudo/Elevation Request", "Clipboard Read", "Credential Access", "Registry Write",
-            "Memory Dump Probe", "Screen Capture WGC", "In-DOM Injection", "Kernel Driver Query",
-            "Raw Disk Sector", "Firewall Rule Add", "Cert Store Access", "Critical Handoff"
+            new() { StateCode = 0, Label = "approval_cancelled", WireCode = "zo.approval_cancelled", Severity = "warning", DecisionSource = "approval", Retryable = true, ColorHex = "#F59E0B", Rationale = "Action approval was cancelled by the user in the confirmation modal." },
+            new() { StateCode = 1, Label = "guardian_denied", WireCode = "zo.guardian_denied", Severity = "critical", DecisionSource = "guardian", Retryable = false, ColorHex = "#EF4444", Rationale = "CUALockScreenGuardian denied action execution because display session is locked (WTS_SESSION_LOCK)." },
+            new() { StateCode = 2, Label = "enterprise_policy_blocked", WireCode = "zo.enterprise_policy_blocked", Severity = "critical", DecisionSource = "enterprise", Retryable = false, ColorHex = "#DC2626", Rationale = "The admin-enforced policy blocks this action; no user permission prompt was permitted." },
+            new() { StateCode = 3, Label = "guardian_timed_out", WireCode = "zo.guardian_timed_out", Severity = "warning", DecisionSource = "guardian", Retryable = true, ColorHex = "#F59E0B", Rationale = "Screen Lock Guardian timed out awaiting display session stabilization. You may retry once." },
+            new() { StateCode = 4, Label = "site_status_blocked", WireCode = "zo.site_status_blocked", Severity = "critical", DecisionSource = "site_status", Retryable = false, ColorHex = "#DC2626", Rationale = "Site-safety policy blocks this action; target is on untrusted domain quarantine list." },
+            new() { StateCode = 5, Label = "user_declined", WireCode = "zo.user_declined", Severity = "critical", DecisionSource = "user_decision", Retryable = false, ColorHex = "#EF4444", Rationale = "The user explicitly declined permission for this proposed computer action." },
+            new() { StateCode = 6, Label = "browser_capability_blocked", WireCode = "zo.browser_capability_blocked", Severity = "elevated", DecisionSource = "browser", Retryable = false, ColorHex = "#8B5CF6", Rationale = "Action requires browser capability that is disabled in current sandbox profile." },
+            new() { StateCode = 7, Label = "persisted_user_denied", WireCode = "zo.persisted_user_denied", Severity = "critical", DecisionSource = "user_persisted_setting", Retryable = false, ColorHex = "#991B1B", Rationale = "Target origin is on persistent blocklist in LevelDB classic-level storage." },
+            new() { StateCode = 8, Label = "financial_risk_intercept", WireCode = "zo.financial_risk_intercept", Severity = "elevated", DecisionSource = "guardian", Retryable = true, ColorHex = "#F59E0B", Rationale = "High-risk financial checkout or recurring payment submission intercepted for verification." },
+            new() { StateCode = 9, Label = "credential_frame_mismatch", WireCode = "zo.credential_frame_mismatch", Severity = "critical", DecisionSource = "browser", Retryable = false, ColorHex = "#EF4444", Rationale = "Cross-origin iframe credential mismatch detected: top_level_origin != credential_frame_origin." },
+            new() { StateCode = 10, Label = "shell_execution_sandbox", WireCode = "zo.shell_execution_sandbox", Severity = "elevated", DecisionSource = "enterprise", Retryable = true, ColorHex = "#06B6D4", Rationale = "Arbitrary shell invocation gated by strict runtime sandbox validation." },
+            new() { StateCode = 11, Label = "clipboard_leak_blocked", WireCode = "zo.clipboard_leak_blocked", Severity = "safe", DecisionSource = "guardian", Retryable = true, ColorHex = "#10B981", Rationale = "Clipboard inspection verified zero credentials or prompt tokens leaked." },
+            new() { StateCode = 12, Label = "in_dom_injection_intercept", WireCode = "zo.in_dom_injection_intercept", Severity = "safe", DecisionSource = "browser", Retryable = true, ColorHex = "#10B981", Rationale = "WebMCP in-page DOM manipulation verified against sanitization rules." },
+            new() { StateCode = 13, Label = "untrusted_origin_quarantine", WireCode = "zo.untrusted_origin_quarantine", Severity = "warning", DecisionSource = "site_status", Retryable = true, ColorHex = "#F59E0B", Rationale = "Non-HTTPS target routed through isolated disposable sandbox profile." },
+            new() { StateCode = 14, Label = "wts_session_locked", WireCode = "zo.wts_session_locked", Severity = "critical", DecisionSource = "guardian", Retryable = false, ColorHex = "#EF4444", Rationale = "WTS_SESSION_LOCK detected: input queue immediately paused and purged." },
+            new() { StateCode = 15, Label = "manual_handoff_requested", WireCode = "zo.manual_handoff_requested", Severity = "elevated", DecisionSource = "approval", Retryable = true, ColorHex = "#7C3AED", Rationale = "Human interaction required: CAPTCHA / biometric MFA challenge encountered." }
         };
-        string[] severities = new[] { "safe", "safe", "warning", "warning", "elevated", "safe", "elevated", "critical", "critical", "warning", "elevated", "critical", "critical", "critical", "critical", "critical" };
-        string[] colors = new[] { "#10B981", "#10B981", "#F59E0B", "#F59E0B", "#EF4444", "#10B981", "#EF4444", "#DC2626", "#DC2626", "#F59E0B", "#EF4444", "#991B1B", "#991B1B", "#991B1B", "#991B1B", "#7C3AED" };
-
-        for (int i = 0; i < 16; i++)
-        {
-            allBadges.Add(new ZoSecurityDecisionBadge
-            {
-                StateCode = i,
-                Label = labels[i],
-                Severity = severities[i],
-                Rationale = $"Security policy rule zo-{i:D2} automated decision vector.",
-                ColorHex = colors[i]
-            });
-        }
 
         var branches = new List<CredentialRecoveryBranch>
         {
-            new() { BranchId = 1, ActionName = "Scrypt Master Password Verification", ProtocolSummary = "Local scrypt constant-time hash re-verification with 64MB memory cost", RiskRating = "Safe" },
-            new() { BranchId = 2, ActionName = "Windows Hello TPM Key Signature", ProtocolSummary = "Hardware-enclave bio authentication signing a challenge nonce", RiskRating = "Safe" },
-            new() { BranchId = 3, ActionName = "Encrypted Local File Vault (.superagent/vault.enc)", ProtocolSummary = "AES-256-GCM sealed key recovery with PBKDF2 derivation", RiskRating = "Standard" },
-            new() { BranchId = 4, ActionName = "Temporary One-Time Paper Session Nonce", ProtocolSummary = "Single-use 256-bit recovery token generated at install", RiskRating = "Elevated" },
-            new() { BranchId = 5, ActionName = "Emergency VPS Headless Break-Glass", ProtocolSummary = "Headless CLI reset trigger requiring local console access", RiskRating = "High" },
-            new() { BranchId = 6, ActionName = "Hardware Security Key (FIDO2 / WebAuthn)", ProtocolSummary = "Physical USB security key challenge verification", RiskRating = "Safe" },
-            new() { BranchId = 7, ActionName = "Complete Vault Wipe & Scrypt Reset", ProtocolSummary = "Destructive reset clearing all credentials and resetting admin", RiskRating = "Critical" }
+            new() { BranchId = 1, ActionIdentifier = "retry_after_credential_delivery", ActionName = "Retry After Credential Delivery", ProtocolSummary = "Secure input overlay / 1Password / Bitwarden vault token injection", RiskRating = "Standard", RiskColor = "#06B6D4" },
+            new() { BranchId = 2, ActionIdentifier = "navigate_to_new_document", ActionName = "Navigate To Alternate Address", ProtocolSummary = "Target auth page unresponsive or infinite redirect loop bypass", RiskRating = "Standard", RiskColor = "#06B6D4" },
+            new() { BranchId = 3, ActionIdentifier = "create_new_tab", ActionName = "Open In Fresh Tab", ProtocolSummary = "Purge corrupted cookies & storage state in isolated new tab session", RiskRating = "Safe", RiskColor = "#10B981" },
+            new() { BranchId = 4, ActionIdentifier = "request_manual_handoff", ActionName = "Take Over Manual Control", ProtocolSummary = "Mandatory user takeover for password change, banking MFA, or CAPTCHA", RiskRating = "Safe", RiskColor = "#10B981" },
+            new() { BranchId = 5, ActionIdentifier = "restart_browser_runtime", ActionName = "Restart Browser Engine", ProtocolSummary = "CDP pipe crash or memory threshold (>1.8GB) recycle", RiskRating = "Elevated", RiskColor = "#F59E0B" },
+            new() { BranchId = 6, ActionIdentifier = "retry_after_resolution", ActionName = "Resume Automated Task", ProtocolSummary = "Post-biometric / WebAuthn token confirmation resumption", RiskRating = "Safe", RiskColor = "#10B981" },
+            new() { BranchId = 7, ActionIdentifier = "stop", ActionName = "Cancel Task (Emergency Halt)", ProtocolSummary = "Emergency termination of CUA loop, revoking all active tab leases", RiskRating = "Critical", RiskColor = "#EF4444" }
         };
 
         return new SecurityGuardianState
         {
             ActiveTier = SecurityTierLevel.PreApproval,
             IsLockScreenArmed = true,
-            ShieldStatus = "LockScreen Guardian Active (0 Violations)",
-            ActiveDecision = allBadges[4], // Sudo/Elevation Request
+            ShieldStatus = "WTS_SESSION_ACTIVE • CUALockScreenGuardian Armed (Zero Leaks)",
+            TopLevelOrigin = "https://store.target-vendor.com",
+            CredentialFrameOrigin = "https://auth.login-service.net/oauth/v2",
+            FormSubmissionOrigin = "https://store.target-vendor.com/checkout/submit",
+            ActiveDecision = allBadges[1], // guardian_denied
             AllBadges = allBadges,
             RecoveryBranches = branches
         };
@@ -964,39 +1013,91 @@ public static class DemoData
     {
         var lines = new List<ReplLogLine>
         {
-            new() { LineIndex = 1, Text = "SuperAgent REPL v2.0.0 [Node.js v20.18 / QuickJS Native Engine]", ColorHex = "#8B5CF6", IsAnsiPrompt = false },
-            new() { LineIndex = 2, Text = "Ready. Context buffer token budget: 25,000 tokens.", ColorHex = "#94A3B8", IsAnsiPrompt = false },
-            new() { LineIndex = 3, Text = "> const client = await SuperAgent.connect('ws://localhost:1469');", ColorHex = "#06B6D4", IsAnsiPrompt = true },
-            new() { LineIndex = 4, Text = "Connected to SuperAgent core_v2 hub (latency: 1.2ms)", ColorHex = "#10B981" },
-            new() { LineIndex = 5, Text = "> const pcb = await client.pcb.inspect('ESP32-S3');", ColorHex = "#06B6D4", IsAnsiPrompt = true },
-            new() { LineIndex = 6, Text = "{ designator: 'U1', mpn: 'ESP32-S3-WROOM-1-N16R8', pins: 41, status: 'routed' }", ColorHex = "#F8FAFC" },
-            new() { LineIndex = 7, Text = "> pcb.runErcCheck();", ColorHex = "#06B6D4", IsAnsiPrompt = true },
-            new() { LineIndex = 8, Text = "⚠️ [ERC-03] Missing 100nF decoupling capacitor on pin 2 (VDD33)", ColorHex = "#F59E0B" },
-            new() { LineIndex = 9, Text = "✅ ERC check completed: 0 errors, 1 advisory.", ColorHex = "#10B981" }
+            new() { LineIndex = 1, Text = "SuperAgent QuickJS REPL v2024-01-13 [Node.js v20.18 / QuickJS Native Engine]", ColorHex = "#8B5CF6", IsAnsiPrompt = false, ApproxTokens = 14 },
+            new() { LineIndex = 2, Text = "[Security] Hardware Scrypt Memory Isolation Active | WTS_SESSION_ACTIVE Armed", ColorHex = "#10B981", IsAnsiPrompt = false, ApproxTokens = 12 },
+            new() { LineIndex = 3, Text = "Context buffer virtualizer initialized. Token budget: 3,840 / 25,000 tokens.", ColorHex = "#94A3B8", IsAnsiPrompt = false, ApproxTokens = 12 },
+            new() { LineIndex = 4, Text = "> const sky = await SkyRuntime.attach();", ColorHex = "#06B6D4", IsAnsiPrompt = true, ApproxTokens = 8 },
+            new() { LineIndex = 5, Text = "SkyRuntime attached. Windows Graphics Capture (WGC) DirectX11 pipeline ready.", ColorHex = "#10B981", ApproxTokens = 12 },
+            new() { LineIndex = 6, Text = "> const cua = await CUAOrchestrator.init({ securityMode: 3, lockWatchdog: true });", ColorHex = "#06B6D4", IsAnsiPrompt = true, ApproxTokens = 16 },
+            new() { LineIndex = 7, Text = "CUAOrchestrator initialized. Mode 3: Pre-Approval Allowed. CUALockScreenGuardian armed.", ColorHex = "#10B981", ApproxTokens = 14 },
+            new() { LineIndex = 8, Text = "> const activeTabs = await cua.listClaimedTabs();", ColorHex = "#06B6D4", IsAnsiPrompt = true, ApproxTokens = 10 },
+            new() { LineIndex = 9, Text = "[ '@tab-v1-finance', '@tab-v2-docs', '@tab-v3-dev' ] (3 active CDP sessions)", ColorHex = "#F8FAFC", ApproxTokens = 15 },
+            new() { LineIndex = 10, Text = "> cua.verifyIframeSecurity('https://store.target-vendor.com');", ColorHex = "#06B6D4", IsAnsiPrompt = true, ApproxTokens = 11 },
+            new() { LineIndex = 11, Text = "⚠️ [zo-09: credential_frame_mismatch] top_level_origin != credential_frame_origin", ColorHex = "#F59E0B", ApproxTokens = 12 },
+            new() { LineIndex = 12, Text = "Autofill blocked. Cross-origin OAuth iframe requires explicit certificate fingerprint validation.", ColorHex = "#EF4444", ApproxTokens = 16 }
         };
 
         var vars = new List<ReplVariableNode>
         {
             new()
             {
-                Name = "client",
-                Type = "SuperAgentClient",
-                Value = "Connected (ws://localhost:1469)",
+                Name = "sky",
+                Type = "Object",
+                Value = "SkyDesktopRuntime { pid: 4812, displays: 1, engine: \"DirectX11/WGC\" }",
+                Memory = "4.8 KB",
+                TypeColor = "#06B6D4",
                 Children = new()
                 {
-                    new() { Name = "port", Type = "number", Value = "1469" },
-                    new() { Name = "activeSession", Type = "string", Value = "\"session-9b5f5b3e\"" }
+                    new() { Name = "activeWindow", Type = "string", Value = "\"SuperAgent.sln - Visual Studio\"", Memory = "0.8 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "displayResolution", Type = "string", Value = "\"2560x1440 @ 144Hz\"", Memory = "0.4 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "wgcCaptureEngine", Type = "string", Value = "\"DirectX11 (Hardware Occluded)\"", Memory = "1.2 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "adaptiveSettlingMs", Type = "number", Value = "1000", Memory = "0.2 KB", TypeColor = "#38BDF8" }
                 }
             },
             new()
             {
-                Name = "pcb",
-                Type = "PCBGraphInstance",
-                Value = "Node [ESP32-S3 Weather]",
+                Name = "cua",
+                Type = "Object",
+                Value = "CUAOrchestrator { state: \"Idle\", tabs: 3, guardian: \"Armed\" }",
+                Memory = "18.2 KB",
+                TypeColor = "#06B6D4",
                 Children = new()
                 {
-                    new() { Name = "componentsCount", Type = "number", Value = "18" },
-                    new() { Name = "netsCount", Type = "number", Value = "26" }
+                    new() { Name = "securityTier", Type = "string", Value = "\"PreApproval (Mode 3)\"", Memory = "0.6 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "lockScreenGuardian", Type = "string", Value = "\"WTS_SESSION_ACTIVE (Armed)\"", Memory = "0.5 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "activeClaimedTab", Type = "string", Value = "\"@tab-v1-finance\"", Memory = "0.4 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "tokenBudget", Type = "string", Value = "\"3,840 / 25,000\"", Memory = "0.3 KB", TypeColor = "#F59E0B" }
+                }
+            },
+            new()
+            {
+                Name = "targetWindow",
+                Type = "Object",
+                Value = "WindowTargetItem { title: \"SuperAgent.sln\", hWnd: 0x0014028A }",
+                Memory = "2.1 KB",
+                TypeColor = "#06B6D4",
+                Children = new()
+                {
+                    new() { Name = "processName", Type = "string", Value = "\"devenv.exe\"", Memory = "0.3 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "bounds", Type = "string", Value = "\"Rect(x:0, y:0, w:1920, h:1040)\"", Memory = "0.4 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "isOccluded", Type = "boolean", Value = "false", Memory = "0.1 KB", TypeColor = "#EC4899" }
+                }
+            },
+            new()
+            {
+                Name = "activeTabs",
+                Type = "Array",
+                Value = "BrowserTab[3] [ @tab-v1-finance, @tab-v2-docs, @tab-v3-dev ]",
+                Memory = "9.6 KB",
+                TypeColor = "#8B5CF6",
+                Children = new()
+                {
+                    new() { Name = "[0]", Type = "string", Value = "\"https://store.target-vendor.com/checkout (Foreground)\"", Memory = "1.8 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "[1]", Type = "string", Value = "\"https://auth.login-service.net/oauth/v2 (Claimed)\"", Memory = "1.4 KB", TypeColor = "#F59E0B" },
+                    new() { Name = "[2]", Type = "string", Value = "\"http://localhost:1469/docs (Background)\"", Memory = "1.1 KB", TypeColor = "#F59E0B" }
+                }
+            },
+            new()
+            {
+                Name = "requestManualHandoff",
+                Type = "Function",
+                Value = "async function(reason: string) -> Promise<void>",
+                Memory = "0.4 KB",
+                TypeColor = "#10B981",
+                Children = new()
+                {
+                    new() { Name = "length", Type = "number", Value = "1", Memory = "0.1 KB", TypeColor = "#38BDF8" },
+                    new() { Name = "name", Type = "string", Value = "\"requestManualHandoff\"", Memory = "0.2 KB", TypeColor = "#F59E0B" }
                 }
             }
         };
@@ -1006,6 +1107,7 @@ public static class DemoData
             TotalTokens = 3840,
             MaxBufferTokens = 25000,
             IsResetPending = false,
+            EngineVersion = "QuickJS v2024-01-13 | Active",
             Lines = lines,
             ScopeVariables = vars
         };
@@ -1039,9 +1141,10 @@ public static class DemoData
             },
             PhotoPresets = new List<PhotoModePreset>
             {
-                new() { Name = "Victory Cheering", Pose = "pose_cheering_arms_up", LightingPreset = "Neon Cyberpunk Sunset" },
-                new() { Name = "Desk Pair Programming", Pose = "pose_typing_keyboard", LightingPreset = "Cozy Midnight Lamp" },
-                new() { Name = "Thinking Stance", Pose = "pose_hand_on_chin", LightingPreset = "Clean Studio Daylight" }
+                new() { Name = "Victory Cheering", Pose = "pose_cheering_arms_up", LightingPreset = "Neon Cyberpunk Sunset", LightingAngle = "45° Key / Rim Magenta", Resolution = "3840x2160 (4K UHD)" },
+                new() { Name = "Desk Pair Programming", Pose = "pose_typing_keyboard", LightingPreset = "Cozy Midnight Lamp", LightingAngle = "90° Soft Overhead", Resolution = "3840x2160 (4K UHD)" },
+                new() { Name = "Thinking Stance", Pose = "pose_hand_on_chin", LightingPreset = "Clean Studio Daylight", LightingAngle = "30° Front Fill", Resolution = "3840x2160 (4K UHD)" },
+                new() { Name = "Holographic Stance", Pose = "pose_standing_confident", LightingPreset = "Cyan & Violet Aurora", LightingAngle = "Backlit 180° Rim", Resolution = "3840x2160 (4K UHD)" }
             }
         };
     }
@@ -1051,9 +1154,9 @@ public static class DemoData
         var images = new List<ImageItem>
         {
             new() { Id = "img-01", Prompt = "Cyberpunk anime female hacker in rain with neon visor, octane render 8k", AspectRatio = "16:9", Engine = "Flux.1 Dev", Seed = 9812401, Steps = 28, CfgScale = 6.5, PaletteName = "Cyberpunk Neon", PreviewHex = "#1E1B4B" },
-            new() { Id = "img-02", Prompt = "Futuristic quantum compute laboratory schematic circuit board render", AspectRatio = "1:1", Engine = "Stable Diffusion 3.5", Seed = 1204891, Steps = 35, CfgScale = 7.0, PaletteName = "Teal & Obsidian", PreviewHex = "#042F2E" },
-            new() { Id = "img-03", Prompt = "Minimalist sunset over digital mountain range, vaporwave grid", AspectRatio = "9:16", Engine = "Imagen 3", Seed = 771249, Steps = 25, CfgScale = 5.0, PaletteName = "Sunset Horizon", PreviewHex = "#4C1D95" },
-            new() { Id = "img-04", Prompt = "Isometric high-tech coffee shop with robotics barista in neo-Tokyo", AspectRatio = "4:3", Engine = "Midjourney v6.1", Seed = 551928, Steps = 30, CfgScale = 8.0, PaletteName = "Pastel Dream", PreviewHex = "#831843" }
+            new() { Id = "img-02", Prompt = "Futuristic quantum compute laboratory schematic circuit board render", AspectRatio = "1:1", Engine = "SDXL", Seed = 1204891, Steps = 35, CfgScale = 7.0, PaletteName = "Teal & Obsidian", PreviewHex = "#042F2E" },
+            new() { Id = "img-03", Prompt = "Minimalist sunset over digital mountain range, vaporwave grid", AspectRatio = "9:16", Engine = "Flux.1 Dev", Seed = 771249, Steps = 25, CfgScale = 5.0, PaletteName = "Sunset Horizon", PreviewHex = "#4C1D95" },
+            new() { Id = "img-04", Prompt = "Isometric high-tech coffee shop with robotics barista in neo-Tokyo", AspectRatio = "4:3", Engine = "SDXL", Seed = 551928, Steps = 30, CfgScale = 8.0, PaletteName = "Pastel Dream", PreviewHex = "#831843" }
         };
 
         var video = new VideoItem
@@ -1112,6 +1215,7 @@ public static class DemoData
             },
             ErcViolations = new List<ErcRuleViolation>
             {
+                new() { RuleId = "ERC_PIN_NOT_DRIVEN", Severity = "Error", Message = "Pin U1.IO14 (JTAG_TMS) configured as input but has no driving net or pull-down.", Component = "U1 (ESP32-S3)" },
                 new() { RuleId = "missing_pullup", Severity = "Warning", Message = "I2C SDA/SCL lines missing 4.7k pull-up resistors to +3V3 rail.", Component = "U3 (BME280)" },
                 new() { RuleId = "missing_decoupling", Severity = "Advisory", Message = "Add a 100nF decoupling capacitor close to pin VDDIO of U3.", Component = "U3 (BME280)" }
             },
@@ -1137,12 +1241,12 @@ public static class DemoData
         {
             Cards = new List<KanbanCard>
             {
-                new() { Column = "ToDo", Title = "Implement WinUI 3 Navigation View", Description = "Add navigation items for 10 workspace stages with acrylic backdrop.", Priority = "High", AssignedPersona = "Windows Specialist", DueDate = "Today" },
-                new() { Column = "ToDo", Title = "Verify KiCad 9 S-Expression Export", Description = "Ensure pcb_ops produces valid .kicad_sch and .kicad_pcb syntaxes.", Priority = "Medium", AssignedPersona = "Hardware Co-Pilot", DueDate = "Tomorrow" },
-                new() { Column = "InProgress", Title = "WGC Occluded Window Capture Canvas", Description = "Implement real-time bounding box settling indicator in Computer Use.", Priority = "Critical", AssignedPersona = "Core Daemon", DueDate = "Active" },
-                new() { Column = "BlockedReview", Title = "Browser Tab Lease Revocation Handshake", Description = "Awaiting user approval for high-risk credit card autofill permission.", Priority = "High", AssignedPersona = "Security Guardian", DueDate = "Paused" },
-                new() { Column = "Done", Title = "scrypt AuthStore Constant-Time Validation", Description = "Hardened core_v2 daemon authentication against timing attacks.", Priority = "High", AssignedPersona = "Security Guardian", DueDate = "Yesterday" },
-                new() { Column = "Done", Title = "Virtualize 25,000-token REPL Console", Description = "Optimized log viewer with ANSI stripping and memory recycle.", Priority = "Medium", AssignedPersona = "Code Janitor", DueDate = "2 days ago" }
+                new() { Column = "ToDo", Title = "Implement WinUI 3 Navigation View", Description = "Add navigation items for 10 workspace stages with acrylic backdrop.", Priority = "High", AssignedPersona = "Windows Specialist", DueDate = "Today", EstimatedTokens = "14.2k tok", Tag = "WinUI 3 / Mica" },
+                new() { Column = "ToDo", Title = "Verify KiCad 9 S-Expression Export", Description = "Ensure pcb_ops produces valid .kicad_sch and .kicad_pcb syntaxes.", Priority = "Medium", AssignedPersona = "Hardware Co-Pilot", DueDate = "Tomorrow", EstimatedTokens = "8.5k tok", Tag = "Hardware ECAD" },
+                new() { Column = "InProgress", Title = "WGC Occluded Window Capture Canvas", Description = "Implement real-time bounding box settling indicator in Computer Use.", Priority = "Critical", AssignedPersona = "Core Daemon", DueDate = "Active", EstimatedTokens = "32.0k tok", Tag = "Direct3D11 / WGC" },
+                new() { Column = "BlockedReview", Title = "Browser Tab Lease Revocation Handshake", Description = "Awaiting user approval for high-risk credit card autofill permission.", Priority = "High", AssignedPersona = "Security Guardian", DueDate = "Paused", EstimatedTokens = "18.5k tok", Tag = "CDP / Browser" },
+                new() { Column = "Done", Title = "scrypt AuthStore Constant-Time Validation", Description = "Hardened core_v2 daemon authentication against timing attacks.", Priority = "High", AssignedPersona = "Security Guardian", DueDate = "Yesterday", EstimatedTokens = "6.8k tok", Tag = "Security Guardian" },
+                new() { Column = "Done", Title = "Virtualize 25,000-token REPL Console", Description = "Optimized log viewer with ANSI stripping and memory recycle.", Priority = "Medium", AssignedPersona = "Code Janitor", DueDate = "2 days ago", EstimatedTokens = "4.1k tok", Tag = "QuickJS / REPL" }
             },
             Routines = new List<CronRoutine>
             {
@@ -1204,14 +1308,14 @@ public static class DemoData
 
         var diagnostics = new List<SystemDoctorDiagnostic>
         {
-            new() { Component = "Node.js Runtime", Status = "Healthy", Details = "Node.js v20.18.0 detected in PATH", IsPassed = true },
+            new() { Component = "NVIDIA CUDA / GPU VRAM", Status = "Healthy", Details = "NVIDIA GeForce RTX 4090 (24,564 MB Dedicated VRAM, CUDA 12.6)", IsPassed = true },
+            new() { Component = "Direct3D11 / WGC Screen Capture", Status = "Healthy", Details = "Feature level 12_1 - WGC compositor zero-flicker frame pool operational", IsPassed = true },
+            new() { Component = "FFmpeg Video Binary Path", Status = "Healthy", Details = "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe (v7.1 nvenc, libx264)", IsPassed = true },
+            new() { Component = "Daemon Loopback Port (:1469)", Status = "Healthy", Details = "127.0.0.1:1469 bound successfully (TCP/IPv4 Axum WebSocket & JSON-RPC)", IsPassed = true },
             new() { Component = "Rust Compiler (rustc)", Status = "Healthy", Details = "rustc 1.83.0 (stable MSVC) with clippy and rustfmt", IsPassed = true },
+            new() { Component = "Node.js Runtime", Status = "Healthy", Details = "Node.js v20.18.0 detected in PATH", IsPassed = true },
             new() { Component = "Git Version Control", Status = "Healthy", Details = "git version 2.47.0.windows.1", IsPassed = true },
-            new() { Component = "FFmpeg Video Engine", Status = "Healthy", Details = "ffmpeg version 7.1 with libx264, libvpx, and nvenc", IsPassed = true },
-            new() { Component = "NVIDIA CUDA / GPU VRAM", Status = "Healthy", Details = "NVIDIA GeForce RTX 4090 (24,564 MB VRAM, CUDA 12.6)", IsPassed = true },
-            new() { Component = "Daemon Loopback Port 1469", Status = "Healthy", Details = "127.0.0.1:1469 bound successfully (TCP/IPv4)", IsPassed = true },
-            new() { Component = "Primary NVMe Storage Disk", Status = "Healthy", Details = "412 GB free of 1,000 GB on volume C:\\", IsPassed = true },
-            new() { Component = "Windows App SDK Runtime", Status = "Healthy", Details = "Microsoft.WindowsAppRuntime.1.5 (self-contained)", IsPassed = true }
+            new() { Component = "Primary NVMe Storage Disk", Status = "Healthy", Details = "412 GB free of 1,000 GB on volume C:\\", IsPassed = true }
         };
 
         return new SettingsCatalogState

@@ -16,10 +16,19 @@ public partial class ReplConsoleViewModel : ObservableObject
     public ObservableCollection<ReplVariableNode> ScopeVariables { get; } = new();
 
     [ObservableProperty]
-    private int _totalTokens;
+    private int _totalTokens = 3840;
 
     [ObservableProperty]
     private int _maxBufferTokens = 25000;
+
+    [ObservableProperty]
+    private string _engineVersion = "QuickJS v2024-01-13 | Active";
+
+    [ObservableProperty]
+    private string _tokenGaugeText = "3,840 / 25,000 tokens";
+
+    [ObservableProperty]
+    private double _tokenPercentage = 15.36;
 
     [ObservableProperty]
     private string _currentCommand = string.Empty;
@@ -28,7 +37,7 @@ public partial class ReplConsoleViewModel : ObservableObject
     private bool _isResetPending;
 
     [ObservableProperty]
-    private string _statusText = "QuickJS Engine Active. Buffer: 3,840 / 25,000 tokens.";
+    private string _statusText = "QuickJS v2024-01-13 Engine Active | Buffer: 3,840 / 25,000 tokens.";
 
     public ReplConsoleViewModel(ReplConsoleState? state = null)
     {
@@ -36,11 +45,20 @@ public partial class ReplConsoleViewModel : ObservableObject
         LoadState();
     }
 
+    partial void OnTotalTokensChanged(int value)
+    {
+        TokenPercentage = MaxBufferTokens > 0 ? Math.Min(100.0, (double)value / MaxBufferTokens * 100) : 0;
+        TokenGaugeText = $"{value:N0} / {MaxBufferTokens:N0} tokens";
+    }
+
     private void LoadState()
     {
         TotalTokens = _state.TotalTokens;
         MaxBufferTokens = _state.MaxBufferTokens;
         IsResetPending = _state.IsResetPending;
+        EngineVersion = _state.EngineVersion;
+        TokenPercentage = MaxBufferTokens > 0 ? (double)TotalTokens / MaxBufferTokens * 100 : 0;
+        TokenGaugeText = $"{TotalTokens:N0} / {MaxBufferTokens:N0} tokens";
 
         Lines.Clear();
         foreach (var line in _state.Lines)
@@ -66,6 +84,12 @@ public partial class ReplConsoleViewModel : ObservableObject
         var cmd = CurrentCommand.Trim();
         CurrentCommand = string.Empty;
 
+        if (cmd.Equals("js_reset", StringComparison.OrdinalIgnoreCase) || cmd.Equals("reset()", StringComparison.OrdinalIgnoreCase))
+        {
+            ResetSession();
+            return;
+        }
+
         Lines.Add(new ReplLogLine
         {
             LineIndex = Lines.Count + 1,
@@ -79,19 +103,39 @@ public partial class ReplConsoleViewModel : ObservableObject
         string outputText;
         string outputColor = "#10B981";
 
-        if (cmd.StartsWith("const ") || cmd.StartsWith("let ") || cmd.StartsWith("var "))
+        if (cmd.Equals("sky", StringComparison.OrdinalIgnoreCase))
+        {
+            outputText = "SkyDesktopRuntime { pid: 4812, displays: 1, activeWindow: \"SuperAgent.sln\", engine: \"DirectX11/WGC\" }";
+            outputColor = "#38BDF8";
+        }
+        else if (cmd.Equals("cua", StringComparison.OrdinalIgnoreCase))
+        {
+            outputText = "CUAOrchestrator { state: \"Idle\", tabs: 3, securityTier: \"PreApproval (Mode 3)\", guardian: \"Armed\" }";
+            outputColor = "#38BDF8";
+        }
+        else if (cmd.Equals("targetWindow", StringComparison.OrdinalIgnoreCase))
+        {
+            outputText = "WindowTargetItem { title: \"SuperAgent.sln - Visual Studio\", hWnd: \"0x0014028A\", occluded: false }";
+            outputColor = "#38BDF8";
+        }
+        else if (cmd.Equals("activeTabs", StringComparison.OrdinalIgnoreCase))
+        {
+            outputText = "[ '@tab-v1-finance', '@tab-v2-docs', '@tab-v3-dev' ] (3 leased browser tabs)";
+            outputColor = "#A78BFA";
+        }
+        else if (cmd.StartsWith("const ") || cmd.StartsWith("let ") || cmd.StartsWith("var "))
         {
             outputText = "undefined";
             outputColor = "#94A3B8";
         }
-        else if (cmd.Contains("error") || cmd.Contains("throw"))
+        else if (cmd.Contains("error", StringComparison.OrdinalIgnoreCase) || cmd.Contains("throw", StringComparison.OrdinalIgnoreCase))
         {
-            outputText = "Uncaught Error: Evaluation failed";
+            outputText = "Uncaught Error: Evaluation failed [zo-01: guardian_denied]";
             outputColor = "#EF4444";
         }
         else
         {
-            outputText = $"[Eval Result]: {cmd} => OK";
+            outputText = $"[Eval Result]: {cmd} => OK (Execution: 1.1ms)";
             outputColor = "#10B981";
         }
 
@@ -105,33 +149,41 @@ public partial class ReplConsoleViewModel : ObservableObject
         });
 
         TotalTokens = Math.Min(MaxBufferTokens, TotalTokens + (cmd.Length + outputText.Length) / 4 + 4);
-        StatusText = $"Executed command. Buffer: {TotalTokens:N0} / {MaxBufferTokens:N0} tokens.";
+        StatusText = $"Executed: '{cmd}' | Buffer: {TotalTokens:N0} / {MaxBufferTokens:N0} tokens.";
     }
 
     [RelayCommand]
     public void ResetSession()
     {
         Lines.Clear();
-        ScopeVariables.Clear();
-        TotalTokens = 150;
+        TotalTokens = 120;
         IsResetPending = false;
 
         Lines.Add(new ReplLogLine
         {
             LineIndex = 1,
-            Text = "Session reset (js_reset invoked). Context buffer purged.",
+            Text = "CUA REPL session context cleared. Global variables and tab bindings have been released.",
             ColorHex = "#F59E0B",
             IsAnsiPrompt = false,
             ApproxTokens = 15
         });
 
-        StatusText = "Session reset complete. Virtual buffer cleared.";
+        Lines.Add(new ReplLogLine
+        {
+            LineIndex = 2,
+            Text = "QuickJS runtime state reinitialized. Memory heap purged to 0 bytes.",
+            ColorHex = "#10B981",
+            IsAnsiPrompt = false,
+            ApproxTokens = 12
+        });
+
+        StatusText = "Session reset (js_reset). Virtual buffer cleared.";
     }
 
     [RelayCommand]
     public void ClearOutput()
     {
         Lines.Clear();
-        StatusText = "Console display cleared.";
+        StatusText = "Console display stream cleared.";
     }
 }

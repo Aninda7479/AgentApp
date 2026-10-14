@@ -5,25 +5,28 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:SuperAgent.ViewModels"
-    xmlns:converters="using:SuperAgent.Converters"
     mc:Ignorable="d"
-    Title="SuperAgent">
+    Title="SuperAgent — Autonomous Agent Desktop">
 
     <Window.SystemBackdrop>
         <MicaBackdrop Kind="Base" />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid Background="{StaticResource ObsidianDeepBrush}">
         <Grid.Resources>
             <DataTemplate x:Key="SessionItemTemplate" x:DataType="vm:SessionItem">
-                <Grid Padding="8,6" ColumnSpacing="8">
+                <Grid Padding="10,8" Margin="0,2" CornerRadius="6" Background="{StaticResource ElevatedCardBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" FontSize="13" />
-                        <TextBlock Text="{x:Bind LastMessage, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock Text="{x:Bind LastMessage, Mode=OneWay}" Foreground="{StaticResource TextMutedBrush}" FontSize="10" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
+                    <Border Grid.Column="1" VerticalAlignment="Center" Background="#1E1B4B" CornerRadius="4" Padding="6,2">
+                        <TextBlock Text="Active" FontSize="9" FontWeight="Medium" Foreground="{StaticResource AccentVioletGlowBrush}" />
+                    </Border>
                 </Grid>
             </DataTemplate>
         </Grid.Resources>
@@ -34,114 +37,125 @@
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="True"
             SelectionChanged="NavView_SelectionChanged"
-            OpenPaneLength="260">
+            OpenPaneLength="270">
 
             <!-- Header / New Chat action inside PaneHeader -->
             <NavigationView.PaneHeader>
-                <StackPanel Padding="16,12,16,8" Spacing="8">
+                <StackPanel Padding="16,14,16,10" Spacing="10">
                     <Button
                         x:Name="NewChatButton"
                         HorizontalAlignment="Stretch"
                         Command="{x:Bind ViewModel.CreateNewSessionCommand}"
-                        Style="{ThemeResource AccentButtonStyle}">
+                        Background="{StaticResource AccentCyberCyanBrush}"
+                        Foreground="#080B11"
+                        CornerRadius="8"
+                        Padding="12,8">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE710;" FontSize="14" />
-                            <TextBlock Text="New Chat" FontWeight="SemiBold" />
+                            <FontIcon Glyph="&#xE710;" FontSize="13" Foreground="#080B11" />
+                            <TextBlock Text="+ New Session" FontWeight="Bold" FontSize="13" />
                         </StackPanel>
                     </Button>
                     <AutoSuggestBox
-                        PlaceholderText="Search..."
+                        PlaceholderText="Search sessions &amp; tags..."
                         QueryIcon="Find"
-                        Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}" />
+                        Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}"
+                        CornerRadius="6" />
                 </StackPanel>
             </NavigationView.PaneHeader>
 
-            <!-- 10 Dedicated Workspace Navigation Items -->
+            <!-- 10 Dedicated Workspace Navigation Items with Cyber Icons -->
             <NavigationView.MenuItems>
-                <NavigationViewItem Tag="Chat" Content="Chat" IsSelected="True">
+                <NavigationViewItem Tag="Chat" Content="Agent Chat" IsSelected="True">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8BD;" />
+                        <FontIcon Glyph="&#xE8BD;" Foreground="{StaticResource AccentCyberCyanBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="ComputerUse" Content="Computer Use">
+                <NavigationViewItem Tag="ComputerUse" Content="Computer Use (WGC)">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE7F4;" />
+                        <FontIcon Glyph="&#xE7F4;" Foreground="{StaticResource AccentCyanGlowBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="BrowserLeasing" Content="Browser Leasing">
+                <NavigationViewItem Tag="BrowserLeasing" Content="Browser Leasing (WebMCP)">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE774;" />
+                        <FontIcon Glyph="&#xE774;" Foreground="{StaticResource AccentCyberCyanBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
                 <NavigationViewItem Tag="ReplConsole" Content="REPL Console">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE756;" />
+                        <FontIcon Glyph="&#xE756;" Foreground="{StaticResource AccentElectricVioletBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
                 <NavigationViewItem Tag="SecurityGuardian" Content="Security Guardian">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xEA18;" />
+                        <FontIcon Glyph="&#xEA18;" Foreground="{StaticResource StatusEmeraldBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="Companion" Content="Companion 3D">
+                <NavigationViewItem Tag="Companion" Content="3D VRM Companion">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE76E;" />
+                        <FontIcon Glyph="&#xE76E;" Foreground="{StaticResource AccentVioletGlowBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="CreativeStudio" Content="Creative Studio">
+                <NavigationViewItem Tag="CreativeStudio" Content="Creative Studio (Wan2.1)">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xEB9F;" />
+                        <FontIcon Glyph="&#xEB9F;" Foreground="{StaticResource AccentAmberEmberBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="PcbEcad" Content="PCB ECAD">
+                <NavigationViewItem Tag="PcbEcad" Content="PCB ECAD Co-Pilot">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE90F;" />
+                        <FontIcon Glyph="&#xE90F;" Foreground="{StaticResource AccentCyberCyanBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="Tasks" Content="Tasks &amp; Kanban">
+                <NavigationViewItem Tag="Tasks" Content="Tasks &amp; Cron Routines">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE823;" />
+                        <FontIcon Glyph="&#xE823;" Foreground="{StaticResource AccentElectricVioletBrush}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <!-- Sidebar Active Sessions Expander -->
             <NavigationView.PaneCustomContent>
-                <Expander Header="Recent Chats" IsExpanded="True" HorizontalAlignment="Stretch" Margin="8,4,8,8">
+                <Expander Header="Session History" IsExpanded="True" HorizontalAlignment="Stretch" Margin="10,6,10,8" Background="Transparent" BorderBrush="{StaticResource BorderSubtleBrush}">
                     <ListView
                         x:Name="SessionsListView"
                         ItemsSource="{x:Bind ViewModel.Sessions}"
                         ItemTemplate="{StaticResource SessionItemTemplate}"
                         SelectionMode="Single"
                         SelectionChanged="SessionsListView_SelectionChanged"
-                        MaxHeight="200" />
+                        MaxHeight="220" />
                 </Expander>
             </NavigationView.PaneCustomContent>
 
-            <!-- Footer / Daemon Status -->
+            <!-- Footer / Daemon Real-Time Telemetry Pill -->
             <NavigationView.PaneFooter>
-                <Border Margin="12,8" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Ellipse Width="8" Height="8" Fill="{x:Bind ViewModel.ConnectionStatusBrush, Mode=OneWay}" />
-                        <TextBlock Text="Daemon:" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Text="{x:Bind ViewModel.ConnectionStatusText, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" />
-                        <TextBlock Text=":" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Text="{x:Bind ViewModel.DaemonPort, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
+                <Border Margin="12,10" Padding="12,8" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Ellipse Width="8" Height="8" Fill="{x:Bind ViewModel.ConnectionStatusBrush, Mode=OneWay}" />
+                            <TextBlock Text="Daemon" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                            <Border Background="#064E3B" CornerRadius="4" Padding="4,1">
+                                <TextBlock Text="127.0.0.1" FontSize="9" FontFamily="Consolas" Foreground="{StaticResource StatusEmeraldBrush}" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.DaemonPort, Mode=OneWay}" FontSize="11" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" VerticalAlignment="Center" />
+                    </Grid>
                 </Border>
             </NavigationView.PaneFooter>
 
             <!-- Main Content Area -->
             <NavigationView.Content>
-                <Grid x:Name="ContentRoot">
+                <Grid x:Name="ContentRoot" Background="{StaticResource ObsidianDeepBrush}">
                     <!-- Chat Page Workspace -->
                     <Grid x:Name="ChatPageGrid">
                         <Grid.RowDefinitions>
@@ -150,73 +164,101 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <!-- Top Title Bar / Session Header -->
-                        <Border Grid.Row="0" Padding="20,12" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                        <!-- Top Breadcrumb Title Bar & Model HUD -->
+                        <Border Grid.Row="0" Padding="24,12" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderSubtleBrush}" Background="{StaticResource ElevatedCardBrush}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                    <FontIcon Glyph="&#xE8BD;" FontSize="18" Foreground="{StaticResource SuperAgentAccentBrush}" />
-                                    <TextBlock Text="{x:Bind ViewModel.ActiveSessionId, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <Border Background="#083344" CornerRadius="6" Padding="8,4">
+                                        <FontIcon Glyph="&#xE8BD;" FontSize="14" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                    </Border>
+                                    <TextBlock Text="Session:" FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <Border Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="4" Padding="8,2">
+                                        <TextBlock Text="{x:Bind ViewModel.ActiveSessionId, Mode=OneWay}" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource AccentCyanGlowBrush}" VerticalAlignment="Center" />
+                                    </Border>
+                                    <Border Background="#064E3B" CornerRadius="4" Padding="6,2" Margin="4,0,0,0">
+                                        <TextBlock Text="Live WebSocket Stream" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource StatusEmeraldBrush}" />
+                                    </Border>
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <ComboBox MinWidth="160" PlaceholderText="Select Model">
-                                        <ComboBoxItem Content="claude-3-7-sonnet" IsSelected="True" />
-                                        <ComboBoxItem Content="gpt-4o" />
-                                        <ComboBoxItem Content="gemini-2.0-flash" />
-                                        <ComboBoxItem Content="deepseek-r1" />
-                                        <ComboBoxItem Content="ollama:llama3.3" />
-                                    </ComboBox>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <Border Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="6" Padding="4">
+                                        <ComboBox MinWidth="180" SelectedValue="{x:Bind ViewModel.SelectedModel, Mode=TwoWay}" SelectedValuePath="Content">
+                                            <ComboBoxItem Content="claude-3-7-sonnet" />
+                                            <ComboBoxItem Content="gpt-4o" />
+                                            <ComboBoxItem Content="gemini-2.0-flash" />
+                                            <ComboBoxItem Content="deepseek-r1" />
+                                            <ComboBoxItem Content="ollama:llama3.3" />
+                                        </ComboBox>
+                                    </Border>
                                 </StackPanel>
                             </Grid>
                         </Border>
 
                         <!-- Message Feed Scroll Area -->
-                        <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="24,16">
-                            <StackPanel Spacing="16">
+                        <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="28,20">
+                            <StackPanel Spacing="18" MaxWidth="1020" HorizontalAlignment="Stretch">
                                 <!-- Messages List -->
                                 <ItemsControl ItemsSource="{x:Bind ViewModel.ActiveMessages}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ChatMessage">
-                                            <Grid Margin="0,4">
+                                            <Grid Margin="0,6">
                                                 <!-- Assistant Message Box -->
                                                 <Border
                                                     Visibility="{x:Bind AssistantVisibility, Mode=OneWay}"
                                                     HorizontalAlignment="Left"
-                                                    MaxWidth="720"
-                                                    Padding="14,12"
+                                                    MaxWidth="800"
+                                                    Padding="18,14"
                                                     CornerRadius="12"
-                                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                    Background="{StaticResource ElevatedCardBrush}"
                                                     BorderThickness="1"
-                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                                                    <StackPanel Spacing="8">
+                                                    BorderBrush="{StaticResource BorderSubtleBrush}">
+                                                    <StackPanel Spacing="10">
+                                                        <!-- Header strip with Assistant badge & timestamp -->
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                <Ellipse Width="6" Height="6" Fill="{StaticResource AccentCyberCyanBrush}" />
+                                                                <TextBlock Text="SuperAgent" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" />
+                                                            </StackPanel>
+                                                        </Grid>
+
                                                         <!-- Collapsible Thought Expander -->
                                                         <Expander
-                                                            Header="Reasoning / Thought Process"
+                                                            Header="Agent Reasoning &amp; Context Trajectory"
                                                             Visibility="{x:Bind ThoughtVisibility, Mode=OneWay}"
-                                                            HorizontalAlignment="Stretch">
-                                                            <TextBlock
-                                                                Text="{x:Bind Thought, Mode=OneWay}"
-                                                                FontFamily="Consolas"
-                                                                FontSize="12"
-                                                                TextWrapping="Wrap"
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                            HorizontalAlignment="Stretch"
+                                                            Background="{StaticResource StageTerminalBrush}"
+                                                            BorderBrush="{StaticResource BorderSubtleBrush}">
+                                                            <Border Padding="12" Background="#030508" CornerRadius="6" Margin="0,4,0,0">
+                                                                <TextBlock
+                                                                    Text="{x:Bind Thought, Mode=OneWay}"
+                                                                    FontFamily="Consolas"
+                                                                    FontSize="11"
+                                                                    TextWrapping="Wrap"
+                                                                    Foreground="{StaticResource TextSecondaryBrush}" />
+                                                            </Border>
                                                         </Expander>
 
                                                         <!-- Tool Call Badge -->
                                                         <Border
                                                             Visibility="{x:Bind ToolVisibility, Mode=OneWay}"
-                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            Background="{StaticResource StageTerminalBrush}"
+                                                            BorderThickness="1"
+                                                            BorderBrush="{StaticResource BorderSubtleBrush}"
                                                             CornerRadius="6"
-                                                            Padding="8,4"
+                                                            Padding="10,5"
                                                             HorizontalAlignment="Left">
-                                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                <FontIcon Glyph="&#xE90F;" FontSize="12" />
-                                                                <TextBlock Text="Tool: " FontSize="11" FontWeight="SemiBold" />
-                                                                <TextBlock Text="{x:Bind ToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                <FontIcon Glyph="&#xE90F;" FontSize="11" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                                                <TextBlock Text="Tool Execution:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                                                <TextBlock Text="{x:Bind ToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" />
                                                             </StackPanel>
                                                         </Border>
 
@@ -225,7 +267,8 @@
                                                             Text="{x:Bind Content, Mode=OneWay}"
                                                             TextWrapping="Wrap"
                                                             FontSize="14"
-                                                            LineHeight="22"
+                                                            LineHeight="24"
+                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                             IsTextSelectionEnabled="True" />
                                                     </StackPanel>
                                                 </Border>
@@ -234,16 +277,21 @@
                                                 <Border
                                                     Visibility="{x:Bind UserVisibility, Mode=OneWay}"
                                                     HorizontalAlignment="Right"
-                                                    MaxWidth="680"
-                                                    Padding="14,10"
+                                                    MaxWidth="740"
+                                                    Padding="16,12"
                                                     CornerRadius="12"
-                                                    Background="{StaticResource UserMessageBackgroundBrush}">
-                                                    <TextBlock
-                                                        Text="{x:Bind Content, Mode=OneWay}"
-                                                        TextWrapping="Wrap"
-                                                        FontSize="14"
-                                                        Foreground="White"
-                                                        IsTextSelectionEnabled="True" />
+                                                    Background="{StaticResource UserMessageBackgroundBrush}"
+                                                    BorderThickness="1"
+                                                    BorderBrush="{StaticResource BorderGlowBrush}">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock
+                                                            Text="{x:Bind Content, Mode=OneWay}"
+                                                            TextWrapping="Wrap"
+                                                            FontSize="14"
+                                                            LineHeight="22"
+                                                            Foreground="#FFFFFF"
+                                                            IsTextSelectionEnabled="True" />
+                                                    </StackPanel>
                                                 </Border>
                                             </Grid>
                                         </DataTemplate>
@@ -254,38 +302,44 @@
                                 <Border
                                     Visibility="{x:Bind ViewModel.GeneratingVisibility, Mode=OneWay}"
                                     HorizontalAlignment="Left"
-                                    MaxWidth="720"
-                                    Padding="14,12"
+                                    MaxWidth="800"
+                                    Padding="18,14"
                                     CornerRadius="12"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    Background="{StaticResource ElevatedCardBrush}"
                                     BorderThickness="1"
-                                    BorderBrush="{StaticResource SuperAgentAccentBrush}">
-                                    <StackPanel Spacing="8">
+                                    BorderBrush="{StaticResource AccentCyberCyanBrush}">
+                                    <StackPanel Spacing="10">
                                         <!-- Live Thought Expander -->
                                         <Expander
-                                            Header="Thinking..."
+                                            Header="Thinking &amp; Tool Planning..."
                                             IsExpanded="True"
                                             Visibility="{x:Bind ViewModel.StreamingThoughtVisibility, Mode=OneWay}"
-                                            HorizontalAlignment="Stretch">
-                                            <TextBlock
-                                                Text="{x:Bind ViewModel.StreamingThought, Mode=OneWay}"
-                                                FontFamily="Consolas"
-                                                FontSize="12"
-                                                TextWrapping="Wrap"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            HorizontalAlignment="Stretch"
+                                            Background="{StaticResource StageTerminalBrush}"
+                                            BorderBrush="{StaticResource BorderSubtleBrush}">
+                                            <Border Padding="12" Background="#030508" CornerRadius="6" Margin="0,4,0,0">
+                                                <TextBlock
+                                                    Text="{x:Bind ViewModel.StreamingThought, Mode=OneWay}"
+                                                    FontFamily="Consolas"
+                                                    FontSize="11"
+                                                    TextWrapping="Wrap"
+                                                    Foreground="{StaticResource AccentVioletGlowBrush}" />
+                                            </Border>
                                         </Expander>
 
                                         <!-- Active Tool Banner -->
                                         <Border
                                             Visibility="{x:Bind ViewModel.ActiveToolVisibility, Mode=OneWay}"
-                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                            Background="{StaticResource StageTerminalBrush}"
+                                            BorderThickness="1"
+                                            BorderBrush="{StaticResource AccentCyberCyanBrush}"
                                             CornerRadius="6"
-                                            Padding="8,4"
+                                            Padding="10,5"
                                             HorizontalAlignment="Left">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <ProgressRing IsActive="True" Width="14" Height="14" />
-                                                <TextBlock Text="Running tool:" FontSize="11" FontWeight="SemiBold" />
-                                                <TextBlock Text="{x:Bind ViewModel.ActiveToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <ProgressRing IsActive="True" Width="14" Height="14" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                                <TextBlock Text="Executing tool:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="{x:Bind ViewModel.ActiveToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource AccentCyanGlowBrush}" />
                                             </StackPanel>
                                         </Border>
 
@@ -294,33 +348,38 @@
                                             Text="{x:Bind ViewModel.StreamingToken, Mode=OneWay}"
                                             TextWrapping="Wrap"
                                             FontSize="14"
-                                            LineHeight="22" />
+                                            LineHeight="24"
+                                            Foreground="{StaticResource TextPrimaryBrush}" />
 
-                                        <ProgressBar IsIndeterminate="True" Height="2" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                                        <ProgressBar IsIndeterminate="True" Height="2" HorizontalAlignment="Stretch" Foreground="{StaticResource AccentCyberCyanBrush}" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- Floating Bottom Composer Bar -->
-                        <Border Grid.Row="2" Padding="24,12,24,16" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Grid RowSpacing="8">
+                        <!-- Floating Bottom Cybernetic Composer Bar -->
+                        <Border Grid.Row="2" Padding="28,14,28,18" Background="{StaticResource ElevatedCardBrush}" BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderSubtleBrush}">
+                            <Grid RowSpacing="10" MaxWidth="1020">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <TextBox
-                                    x:Name="ComposerInputBox"
-                                    Grid.Row="0"
-                                    Text="{x:Bind ViewModel.CurrentInput, Mode=TwoWay}"
-                                    PlaceholderText="Ask SuperAgent anything... (Shift+Enter for new line)"
-                                    AcceptsReturn="True"
-                                    TextWrapping="Wrap"
-                                    MinHeight="64"
-                                    MaxHeight="180"
-                                    KeyDown="ComposerInputBox_KeyDown"
-                                    CornerRadius="8" />
+                                <Border Background="{StaticResource StageTerminalBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}" CornerRadius="10" Padding="2">
+                                    <TextBox
+                                        x:Name="ComposerInputBox"
+                                        Text="{x:Bind ViewModel.CurrentInput, Mode=TwoWay}"
+                                        PlaceholderText="Ask SuperAgent anything or issue command... (Press Enter to send, Shift+Enter for newline)"
+                                        AcceptsReturn="True"
+                                        TextWrapping="Wrap"
+                                        MinHeight="72"
+                                        MaxHeight="180"
+                                        KeyDown="ComposerInputBox_KeyDown"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Foreground="{StaticResource TextPrimaryBrush}"
+                                        FontSize="13" />
+                                </Border>
 
                                 <Grid Grid.Row="1">
                                     <Grid.ColumnDefinitions>
@@ -328,29 +387,48 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
+                                    <!-- Quick Tool Trigger Pills -->
                                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <Button ToolTipService.ToolTip="Attach File">
-                                            <FontIcon Glyph="&#xE723;" FontSize="14" />
+                                        <Button ToolTipService.ToolTip="Attach Context / Source File" CornerRadius="6" Padding="10,6" Background="{StaticResource ElevatedCardBrush}" BorderThickness="1" BorderBrush="{StaticResource BorderSubtleBrush}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE723;" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="Attach" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                                            </StackPanel>
                                         </Button>
+                                        <Border CornerRadius="6" Padding="8,4" Background="#083344" BorderThickness="1" BorderBrush="#0E7490">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <FontIcon Glyph="&#xE774;" FontSize="10" Foreground="{StaticResource AccentCyberCyanBrush}" />
+                                                <TextBlock Text="WebMCP Ready" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentCyanGlowBrush}" />
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
                                         <Button
                                             Command="{x:Bind ViewModel.StopGenerationCommand}"
-                                            Visibility="{x:Bind ViewModel.GeneratingVisibility, Mode=OneWay}">
+                                            Visibility="{x:Bind ViewModel.GeneratingVisibility, Mode=OneWay}"
+                                            Background="#450A0A"
+                                            Foreground="{StaticResource StatusCrimsonBrush}"
+                                            BorderThickness="1"
+                                            BorderBrush="#991B1B"
+                                            CornerRadius="6"
+                                            Padding="14,6">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <FontIcon Glyph="&#xE71A;" FontSize="12" />
-                                                <TextBlock Text="Stop" />
+                                                <FontIcon Glyph="&#xE71A;" FontSize="11" Foreground="{StaticResource StatusCrimsonBrush}" />
+                                                <TextBlock Text="Halt Agent" FontSize="12" FontWeight="SemiBold" />
                                             </StackPanel>
                                         </Button>
 
                                         <Button
                                             Command="{x:Bind ViewModel.SendMessageCommand}"
-                                            Style="{ThemeResource AccentButtonStyle}"
-                                            IsEnabled="{x:Bind ViewModel.IsNotGenerating, Mode=OneWay}">
+                                            IsEnabled="{x:Bind ViewModel.IsNotGenerating, Mode=OneWay}"
+                                            Background="{StaticResource AccentCyberCyanBrush}"
+                                            Foreground="#080B11"
+                                            CornerRadius="6"
+                                            Padding="18,6">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <FontIcon Glyph="&#xE724;" FontSize="12" />
-                                                <TextBlock Text="Send" FontWeight="SemiBold" />
+                                                <FontIcon Glyph="&#xE724;" FontSize="12" Foreground="#080B11" />
+                                                <TextBlock Text="Dispatch" FontWeight="Bold" FontSize="12" />
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
