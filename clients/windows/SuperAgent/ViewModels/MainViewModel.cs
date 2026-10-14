@@ -7,6 +7,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using SuperAgent.Core;
 
 namespace SuperAgent.ViewModels;
@@ -39,8 +41,20 @@ public partial class ChatMessage : ObservableObject
     [ObservableProperty]
     private string? _thought;
 
+    partial void OnThoughtChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasThought));
+        OnPropertyChanged(nameof(ThoughtVisibility));
+    }
+
     [ObservableProperty]
     private string? _toolName;
+
+    partial void OnToolNameChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasTool));
+        OnPropertyChanged(nameof(ToolVisibility));
+    }
 
     [ObservableProperty]
     private bool _isGenerating;
@@ -51,6 +65,11 @@ public partial class ChatMessage : ObservableObject
     public bool IsAssistant => Role == "assistant";
     public bool HasThought => !string.IsNullOrWhiteSpace(Thought);
     public bool HasTool => !string.IsNullOrWhiteSpace(ToolName);
+
+    public Visibility AssistantVisibility => IsAssistant ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility UserVisibility => IsUser ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ThoughtVisibility => HasThought ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ToolVisibility => HasTool ? Visibility.Visible : Visibility.Collapsed;
 }
 
 public partial class MainViewModel : ObservableObject
@@ -81,17 +100,49 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _streamingThought = string.Empty;
 
+    public Visibility StreamingThoughtVisibility => string.IsNullOrWhiteSpace(StreamingThought) ? Visibility.Collapsed : Visibility.Visible;
+
+    partial void OnStreamingThoughtChanged(string value)
+    {
+        OnPropertyChanged(nameof(StreamingThoughtVisibility));
+    }
+
     [ObservableProperty]
     private string _streamingToken = string.Empty;
 
     [ObservableProperty]
     private bool _isGenerating;
 
+    public Visibility GeneratingVisibility => IsGenerating ? Visibility.Visible : Visibility.Collapsed;
+    public bool IsNotGenerating => !IsGenerating;
+
+    partial void OnIsGeneratingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(GeneratingVisibility));
+        OnPropertyChanged(nameof(IsNotGenerating));
+    }
+
     [ObservableProperty]
     private bool _isConnected;
 
+    public string ConnectionStatusText => IsConnected ? "Connected" : "Disconnected";
+    public SolidColorBrush ConnectionStatusBrush => new(IsConnected ? Microsoft.UI.ColorHelper.FromArgb(255, 16, 185, 129) : Microsoft.UI.ColorHelper.FromArgb(255, 239, 68, 68));
+
+    partial void OnIsConnectedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ConnectionStatusText));
+        OnPropertyChanged(nameof(ConnectionStatusBrush));
+    }
+
     [ObservableProperty]
     private string? _activeToolName;
+
+    public Visibility ActiveToolVisibility => string.IsNullOrWhiteSpace(ActiveToolName) ? Visibility.Collapsed : Visibility.Visible;
+
+    partial void OnActiveToolNameChanged(string? value)
+    {
+        OnPropertyChanged(nameof(ActiveToolVisibility));
+    }
 
     [ObservableProperty]
     private string _currentInput = string.Empty;

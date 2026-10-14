@@ -13,360 +13,356 @@
         <MicaBackdrop Kind="Base" />
     </Window.SystemBackdrop>
 
-    <Window.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVis" />
-        <converters:BoolToVisibilityConverter x:Key="InverseBoolToVis" Invert="True" />
-        <converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVis" />
-        <converters:ConnectionStatusTextConverter x:Key="ConnStatusText" />
-        <converters:ConnectionStatusColorConverter x:Key="ConnStatusColor" />
-
-        <DataTemplate x:Key="SessionItemTemplate" x:DataType="vm:SessionItem">
-            <Grid Padding="8,6" ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Spacing="2">
-                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" FontSize="13" />
-                    <TextBlock Text="{x:Bind LastMessage, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-            </Grid>
-        </DataTemplate>
-    </Window.Resources>
-
-    <NavigationView
-        x:Name="NavView"
-        PaneDisplayMode="Left"
-        IsBackButtonVisible="Collapsed"
-        IsSettingsVisible="True"
-        SelectionChanged="NavView_SelectionChanged"
-        OpenPaneLength="260">
-
-        <!-- Header / New Chat action inside PaneHeader -->
-        <NavigationView.PaneHeader>
-            <StackPanel Padding="16,12,16,8" Spacing="8">
-                <Button
-                    x:Name="NewChatButton"
-                    HorizontalAlignment="Stretch"
-                    Command="{x:Bind ViewModel.CreateNewSessionCommand}"
-                    Style="{ThemeResource AccentButtonStyle}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE710;" FontSize="14" />
-                        <TextBlock Text="New Chat" FontWeight="SemiBold" />
+    <Grid>
+        <Grid.Resources>
+            <DataTemplate x:Key="SessionItemTemplate" x:DataType="vm:SessionItem">
+                <Grid Padding="8,6" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" FontSize="13" />
+                        <TextBlock Text="{x:Bind LastMessage, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                </Button>
-                <AutoSuggestBox
-                    PlaceholderText="Search..."
-                    QueryIcon="Find"
-                    Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}" />
-            </StackPanel>
-        </NavigationView.PaneHeader>
+                </Grid>
+            </DataTemplate>
+        </Grid.Resources>
 
-        <!-- 10 Dedicated Workspace Navigation Items -->
-        <NavigationView.MenuItems>
-            <NavigationViewItem Tag="Chat" Content="Chat" IsSelected="True">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE8BD;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
+        <NavigationView
+            x:Name="NavView"
+            PaneDisplayMode="Left"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="True"
+            SelectionChanged="NavView_SelectionChanged"
+            OpenPaneLength="260">
 
-            <NavigationViewItem Tag="ComputerUse" Content="Computer Use">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE7F4;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-
-            <NavigationViewItem Tag="BrowserLeasing" Content="Browser Leasing">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE774;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-
-            <NavigationViewItem Tag="ReplConsole" Content="REPL Console">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE756;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-
-            <NavigationViewItem Tag="SecurityGuardian" Content="Security Guardian">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xEA18;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-
-            <NavigationViewItem Tag="Companion" Content="Companion 3D">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE76E;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-
-            <NavigationViewItem Tag="CreativeStudio" Content="Creative Studio">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xEB9F;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-
-            <NavigationViewItem Tag="PcbEcad" Content="PCB ECAD">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE90F;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-
-            <NavigationViewItem Tag="Tasks" Content="Tasks &amp; Kanban">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE823;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-        </NavigationView.MenuItems>
-
-        <!-- Sidebar Active Sessions Expander -->
-        <NavigationView.PaneCustomContent>
-            <Expander Header="Recent Chats" IsExpanded="True" HorizontalAlignment="Stretch" Margin="8,4,8,8">
-                <ListView
-                    x:Name="SessionsListView"
-                    ItemsSource="{x:Bind ViewModel.Sessions}"
-                    ItemTemplate="{StaticResource SessionItemTemplate}"
-                    SelectionMode="Single"
-                    SelectionChanged="SessionsListView_SelectionChanged"
-                    MaxHeight="200" />
-            </Expander>
-        </NavigationView.PaneCustomContent>
-
-        <!-- Footer / Daemon Status -->
-        <NavigationView.PaneFooter>
-            <Border Margin="12,8" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8" Fill="{x:Bind ViewModel.IsConnected, Mode=OneWay, Converter={StaticResource ConnStatusColor}}" />
-                    <TextBlock Text="Daemon:" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="{x:Bind ViewModel.IsConnected, Mode=OneWay, Converter={StaticResource ConnStatusText}}" FontSize="11" FontWeight="SemiBold" />
-                    <TextBlock Text=":" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="{x:Bind ViewModel.DaemonPort, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-            </Border>
-        </NavigationView.PaneFooter>
-
-        <!-- Main Content Area -->
-        <NavigationView.Content>
-            <Grid x:Name="ContentRoot">
-                <!-- Chat Page Workspace -->
-                <Grid x:Name="ChatPageGrid">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <!-- Top Title Bar / Session Header -->
-                    <Border Grid.Row="0" Padding="20,12" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource LayerFillColorDefaultBrush}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xE8BD;" FontSize="18" Foreground="{StaticResource SuperAgentAccentBrush}" />
-                                <TextBlock Text="{x:Bind ViewModel.ActiveSessionId, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <ComboBox MinWidth="160" PlaceholderText="Select Model">
-                                    <ComboBoxItem Content="claude-3-7-sonnet" IsSelected="True" />
-                                    <ComboBoxItem Content="gpt-4o" />
-                                    <ComboBoxItem Content="gemini-2.0-flash" />
-                                    <ComboBoxItem Content="deepseek-r1" />
-                                    <ComboBoxItem Content="ollama:llama3.3" />
-                                </ComboBox>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <!-- Message Feed Scroll Area -->
-                    <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="24,16">
-                        <StackPanel Spacing="16">
-                            <!-- Messages List -->
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.ActiveMessages}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:ChatMessage">
-                                        <Grid Margin="0,4">
-                                            <!-- Assistant Message Box -->
-                                            <Border
-                                                Visibility="{x:Bind IsAssistant, Mode=OneWay, Converter={StaticResource BoolToVis}}"
-                                                HorizontalAlignment="Left"
-                                                MaxWidth="720"
-                                                Padding="14,12"
-                                                CornerRadius="12"
-                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                                BorderThickness="1"
-                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                                                <StackPanel Spacing="8">
-                                                    <!-- Collapsible Thought Expander -->
-                                                    <Expander
-                                                        Header="Reasoning / Thought Process"
-                                                        Visibility="{x:Bind HasThought, Mode=OneWay, Converter={StaticResource BoolToVis}}"
-                                                        HorizontalAlignment="Stretch">
-                                                        <TextBlock
-                                                            Text="{x:Bind Thought, Mode=OneWay}"
-                                                            FontFamily="Consolas"
-                                                            FontSize="12"
-                                                            TextWrapping="Wrap"
-                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                                    </Expander>
-
-                                                    <!-- Tool Call Badge -->
-                                                    <Border
-                                                        Visibility="{x:Bind HasTool, Mode=OneWay, Converter={StaticResource BoolToVis}}"
-                                                        Background="{ThemeResource LayerFillColorAltBrush}"
-                                                        CornerRadius="6"
-                                                        Padding="8,4"
-                                                        HorizontalAlignment="Left">
-                                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                                            <FontIcon Glyph="&#xE90F;" FontSize="12" />
-                                                            <TextBlock Text="Tool: " FontSize="11" FontWeight="SemiBold" />
-                                                            <TextBlock Text="{x:Bind ToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" />
-                                                        </StackPanel>
-                                                    </Border>
-
-                                                    <!-- Message Text -->
-                                                    <TextBlock
-                                                        Text="{x:Bind Content, Mode=OneWay}"
-                                                        TextWrapping="Wrap"
-                                                        FontSize="14"
-                                                        LineHeight="22"
-                                                        IsTextSelectionEnabled="True" />
-                                                </StackPanel>
-                                            </Border>
-
-                                            <!-- User Message Box -->
-                                            <Border
-                                                Visibility="{x:Bind IsUser, Mode=OneWay, Converter={StaticResource BoolToVis}}"
-                                                HorizontalAlignment="Right"
-                                                MaxWidth="680"
-                                                Padding="14,10"
-                                                CornerRadius="12"
-                                                Background="{StaticResource UserMessageBackgroundBrush}">
-                                                <TextBlock
-                                                    Text="{x:Bind Content, Mode=OneWay}"
-                                                    TextWrapping="Wrap"
-                                                    FontSize="14"
-                                                    Foreground="White"
-                                                    IsTextSelectionEnabled="True" />
-                                            </Border>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
-                            <!-- Live Streaming Bubble (While Generating) -->
-                            <Border
-                                Visibility="{x:Bind ViewModel.IsGenerating, Mode=OneWay, Converter={StaticResource BoolToVis}}"
-                                HorizontalAlignment="Left"
-                                MaxWidth="720"
-                                Padding="14,12"
-                                CornerRadius="12"
-                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderThickness="1"
-                                BorderBrush="{StaticResource SuperAgentAccentBrush}">
-                                <StackPanel Spacing="8">
-                                    <!-- Live Thought Expander -->
-                                    <Expander
-                                        Header="Thinking..."
-                                        IsExpanded="True"
-                                        Visibility="{x:Bind ViewModel.StreamingThought, Mode=OneWay, Converter={StaticResource StringNotEmptyToVis}}"
-                                        HorizontalAlignment="Stretch">
-                                        <TextBlock
-                                            Text="{x:Bind ViewModel.StreamingThought, Mode=OneWay}"
-                                            FontFamily="Consolas"
-                                            FontSize="12"
-                                            TextWrapping="Wrap"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    </Expander>
-
-                                    <!-- Active Tool Banner -->
-                                    <Border
-                                        Visibility="{x:Bind ViewModel.ActiveToolName, Mode=OneWay, Converter={StaticResource StringNotEmptyToVis}}"
-                                        Background="{ThemeResource LayerFillColorAltBrush}"
-                                        CornerRadius="6"
-                                        Padding="8,4"
-                                        HorizontalAlignment="Left">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <ProgressRing IsActive="True" Width="14" Height="14" />
-                                            <TextBlock Text="Running tool:" FontSize="11" FontWeight="SemiBold" />
-                                            <TextBlock Text="{x:Bind ViewModel.ActiveToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" />
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Live Streaming Tokens -->
-                                    <TextBlock
-                                        Text="{x:Bind ViewModel.StreamingToken, Mode=OneWay}"
-                                        TextWrapping="Wrap"
-                                        FontSize="14"
-                                        LineHeight="22" />
-
-                                    <ProgressBar IsIndeterminate="True" Height="2" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
-                                </StackPanel>
-                            </Border>
+            <!-- Header / New Chat action inside PaneHeader -->
+            <NavigationView.PaneHeader>
+                <StackPanel Padding="16,12,16,8" Spacing="8">
+                    <Button
+                        x:Name="NewChatButton"
+                        HorizontalAlignment="Stretch"
+                        Command="{x:Bind ViewModel.CreateNewSessionCommand}"
+                        Style="{ThemeResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE710;" FontSize="14" />
+                            <TextBlock Text="New Chat" FontWeight="SemiBold" />
                         </StackPanel>
-                    </ScrollViewer>
+                    </Button>
+                    <AutoSuggestBox
+                        PlaceholderText="Search..."
+                        QueryIcon="Find"
+                        Text="{x:Bind ViewModel.SearchQuery, Mode=TwoWay}" />
+                </StackPanel>
+            </NavigationView.PaneHeader>
 
-                    <!-- Floating Bottom Composer Bar -->
-                    <Border Grid.Row="2" Padding="24,12,24,16" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                        <Grid RowSpacing="8">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
+            <!-- 10 Dedicated Workspace Navigation Items -->
+            <NavigationView.MenuItems>
+                <NavigationViewItem Tag="Chat" Content="Chat" IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8BD;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
 
-                            <TextBox
-                                x:Name="ComposerInputBox"
-                                Grid.Row="0"
-                                Text="{x:Bind ViewModel.CurrentInput, Mode=TwoWay}"
-                                PlaceholderText="Ask SuperAgent anything... (Shift+Enter for new line)"
-                                AcceptsReturn="True"
-                                TextWrapping="Wrap"
-                                MinHeight="64"
-                                MaxHeight="180"
-                                KeyDown="ComposerInputBox_KeyDown"
-                                CornerRadius="8" />
+                <NavigationViewItem Tag="ComputerUse" Content="Computer Use">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7F4;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
 
-                            <Grid Grid.Row="1">
+                <NavigationViewItem Tag="BrowserLeasing" Content="Browser Leasing">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE774;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Tag="ReplConsole" Content="REPL Console">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE756;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Tag="SecurityGuardian" Content="Security Guardian">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEA18;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Tag="Companion" Content="Companion 3D">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE76E;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Tag="CreativeStudio" Content="Creative Studio">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEB9F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Tag="PcbEcad" Content="PCB ECAD">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE90F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <NavigationViewItem Tag="Tasks" Content="Tasks &amp; Kanban">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE823;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <!-- Sidebar Active Sessions Expander -->
+            <NavigationView.PaneCustomContent>
+                <Expander Header="Recent Chats" IsExpanded="True" HorizontalAlignment="Stretch" Margin="8,4,8,8">
+                    <ListView
+                        x:Name="SessionsListView"
+                        ItemsSource="{x:Bind ViewModel.Sessions}"
+                        ItemTemplate="{StaticResource SessionItemTemplate}"
+                        SelectionMode="Single"
+                        SelectionChanged="SessionsListView_SelectionChanged"
+                        MaxHeight="200" />
+                </Expander>
+            </NavigationView.PaneCustomContent>
+
+            <!-- Footer / Daemon Status -->
+            <NavigationView.PaneFooter>
+                <Border Margin="12,8" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Ellipse Width="8" Height="8" Fill="{x:Bind ViewModel.ConnectionStatusBrush, Mode=OneWay}" />
+                        <TextBlock Text="Daemon:" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.ConnectionStatusText, Mode=OneWay}" FontSize="11" FontWeight="SemiBold" />
+                        <TextBlock Text=":" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="{x:Bind ViewModel.DaemonPort, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+            </NavigationView.PaneFooter>
+
+            <!-- Main Content Area -->
+            <NavigationView.Content>
+                <Grid x:Name="ContentRoot">
+                    <!-- Chat Page Workspace -->
+                    <Grid x:Name="ChatPageGrid">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Top Title Bar / Session Header -->
+                        <Border Grid.Row="0" Padding="20,12" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <Button ToolTipService.ToolTip="Attach File">
-                                        <FontIcon Glyph="&#xE723;" FontSize="14" />
-                                    </Button>
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE8BD;" FontSize="18" Foreground="{StaticResource SuperAgentAccentBrush}" />
+                                    <TextBlock Text="{x:Bind ViewModel.ActiveSessionId, Mode=OneWay}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                    <Button
-                                        Command="{x:Bind ViewModel.StopGenerationCommand}"
-                                        Visibility="{x:Bind ViewModel.IsGenerating, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <FontIcon Glyph="&#xE71A;" FontSize="12" />
-                                            <TextBlock Text="Stop" />
-                                        </StackPanel>
-                                    </Button>
-
-                                    <Button
-                                        Command="{x:Bind ViewModel.SendMessageCommand}"
-                                        Style="{ThemeResource AccentButtonStyle}"
-                                        IsEnabled="{x:Bind ViewModel.IsGenerating, Mode=OneWay, Converter={StaticResource InverseBoolToVis}}">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <FontIcon Glyph="&#xE724;" FontSize="12" />
-                                            <TextBlock Text="Send" FontWeight="SemiBold" />
-                                        </StackPanel>
-                                    </Button>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ComboBox MinWidth="160" PlaceholderText="Select Model">
+                                        <ComboBoxItem Content="claude-3-7-sonnet" IsSelected="True" />
+                                        <ComboBoxItem Content="gpt-4o" />
+                                        <ComboBoxItem Content="gemini-2.0-flash" />
+                                        <ComboBoxItem Content="deepseek-r1" />
+                                        <ComboBoxItem Content="ollama:llama3.3" />
+                                    </ComboBox>
                                 </StackPanel>
                             </Grid>
-                        </Grid>
-                    </Border>
-                </Grid>
+                        </Border>
 
-                <!-- Dedicated Workspace Host Frame (Switches between all other 9 pages) -->
-                <Frame x:Name="WorkspaceFrame" Visibility="Collapsed" />
-            </Grid>
-        </NavigationView.Content>
-    </NavigationView>
+                        <!-- Message Feed Scroll Area -->
+                        <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="24,16">
+                            <StackPanel Spacing="16">
+                                <!-- Messages List -->
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.ActiveMessages}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ChatMessage">
+                                            <Grid Margin="0,4">
+                                                <!-- Assistant Message Box -->
+                                                <Border
+                                                    Visibility="{x:Bind AssistantVisibility, Mode=OneWay}"
+                                                    HorizontalAlignment="Left"
+                                                    MaxWidth="720"
+                                                    Padding="14,12"
+                                                    CornerRadius="12"
+                                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                                    <StackPanel Spacing="8">
+                                                        <!-- Collapsible Thought Expander -->
+                                                        <Expander
+                                                            Header="Reasoning / Thought Process"
+                                                            Visibility="{x:Bind ThoughtVisibility, Mode=OneWay}"
+                                                            HorizontalAlignment="Stretch">
+                                                            <TextBlock
+                                                                Text="{x:Bind Thought, Mode=OneWay}"
+                                                                FontFamily="Consolas"
+                                                                FontSize="12"
+                                                                TextWrapping="Wrap"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                        </Expander>
+
+                                                        <!-- Tool Call Badge -->
+                                                        <Border
+                                                            Visibility="{x:Bind ToolVisibility, Mode=OneWay}"
+                                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                                            CornerRadius="6"
+                                                            Padding="8,4"
+                                                            HorizontalAlignment="Left">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <FontIcon Glyph="&#xE90F;" FontSize="12" />
+                                                                <TextBlock Text="Tool: " FontSize="11" FontWeight="SemiBold" />
+                                                                <TextBlock Text="{x:Bind ToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" />
+                                                            </StackPanel>
+                                                        </Border>
+
+                                                        <!-- Message Text -->
+                                                        <TextBlock
+                                                            Text="{x:Bind Content, Mode=OneWay}"
+                                                            TextWrapping="Wrap"
+                                                            FontSize="14"
+                                                            LineHeight="22"
+                                                            IsTextSelectionEnabled="True" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- User Message Box -->
+                                                <Border
+                                                    Visibility="{x:Bind UserVisibility, Mode=OneWay}"
+                                                    HorizontalAlignment="Right"
+                                                    MaxWidth="680"
+                                                    Padding="14,10"
+                                                    CornerRadius="12"
+                                                    Background="{StaticResource UserMessageBackgroundBrush}">
+                                                    <TextBlock
+                                                        Text="{x:Bind Content, Mode=OneWay}"
+                                                        TextWrapping="Wrap"
+                                                        FontSize="14"
+                                                        Foreground="White"
+                                                        IsTextSelectionEnabled="True" />
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Live Streaming Bubble (While Generating) -->
+                                <Border
+                                    Visibility="{x:Bind ViewModel.GeneratingVisibility, Mode=OneWay}"
+                                    HorizontalAlignment="Left"
+                                    MaxWidth="720"
+                                    Padding="14,12"
+                                    CornerRadius="12"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    BorderBrush="{StaticResource SuperAgentAccentBrush}">
+                                    <StackPanel Spacing="8">
+                                        <!-- Live Thought Expander -->
+                                        <Expander
+                                            Header="Thinking..."
+                                            IsExpanded="True"
+                                            Visibility="{x:Bind ViewModel.StreamingThoughtVisibility, Mode=OneWay}"
+                                            HorizontalAlignment="Stretch">
+                                            <TextBlock
+                                                Text="{x:Bind ViewModel.StreamingThought, Mode=OneWay}"
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                TextWrapping="Wrap"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </Expander>
+
+                                        <!-- Active Tool Banner -->
+                                        <Border
+                                            Visibility="{x:Bind ViewModel.ActiveToolVisibility, Mode=OneWay}"
+                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                            CornerRadius="6"
+                                            Padding="8,4"
+                                            HorizontalAlignment="Left">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <ProgressRing IsActive="True" Width="14" Height="14" />
+                                                <TextBlock Text="Running tool:" FontSize="11" FontWeight="SemiBold" />
+                                                <TextBlock Text="{x:Bind ViewModel.ActiveToolName, Mode=OneWay}" FontSize="11" FontFamily="Consolas" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Live Streaming Tokens -->
+                                        <TextBlock
+                                            Text="{x:Bind ViewModel.StreamingToken, Mode=OneWay}"
+                                            TextWrapping="Wrap"
+                                            FontSize="14"
+                                            LineHeight="22" />
+
+                                        <ProgressBar IsIndeterminate="True" Height="2" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- Floating Bottom Composer Bar -->
+                        <Border Grid.Row="2" Padding="24,12,24,16" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                            <Grid RowSpacing="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBox
+                                    x:Name="ComposerInputBox"
+                                    Grid.Row="0"
+                                    Text="{x:Bind ViewModel.CurrentInput, Mode=TwoWay}"
+                                    PlaceholderText="Ask SuperAgent anything... (Shift+Enter for new line)"
+                                    AcceptsReturn="True"
+                                    TextWrapping="Wrap"
+                                    MinHeight="64"
+                                    MaxHeight="180"
+                                    KeyDown="ComposerInputBox_KeyDown"
+                                    CornerRadius="8" />
+
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Button ToolTipService.ToolTip="Attach File">
+                                            <FontIcon Glyph="&#xE723;" FontSize="14" />
+                                        </Button>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                        <Button
+                                            Command="{x:Bind ViewModel.StopGenerationCommand}"
+                                            Visibility="{x:Bind ViewModel.GeneratingVisibility, Mode=OneWay}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE71A;" FontSize="12" />
+                                                <TextBlock Text="Stop" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <Button
+                                            Command="{x:Bind ViewModel.SendMessageCommand}"
+                                            Style="{ThemeResource AccentButtonStyle}"
+                                            IsEnabled="{x:Bind ViewModel.IsNotGenerating, Mode=OneWay}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE724;" FontSize="12" />
+                                                <TextBlock Text="Send" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Dedicated Workspace Host Frame (Switches between all other 9 pages) -->
+                    <Frame x:Name="WorkspaceFrame" Visibility="Collapsed" />
+                </Grid>
+            </NavigationView.Content>
+        </NavigationView>
+    </Grid>
 </Window>

@@ -83,10 +83,10 @@ public partial class PcbEcadViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public void SetViewMode(string mode)
+    public void SetViewMode(object? mode)
     {
-        ActiveViewMode = mode;
-        StatusText = $"Switched ECAD stage to: {mode} view.";
+        ActiveViewMode = mode?.ToString() ?? "Schematic";
+        StatusText = $"Switched ECAD stage to: {ActiveViewMode} view.";
     }
 
     [RelayCommand]

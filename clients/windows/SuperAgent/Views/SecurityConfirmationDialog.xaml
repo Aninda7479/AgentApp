@@ -34,7 +34,7 @@
                     <TextBlock Text="{x:Bind ViewModel.ShieldStatus, Mode=OneWay}" FontWeight="SemiBold" FontSize="13" Foreground="#EEF2FF" />
                     <TextBlock Text="Hardware-enforced scrypt key storage + zero-leak sandbox" FontSize="11" Foreground="#C7D2FE" />
                 </StackPanel>
-                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsLockScreenArmed, Mode=TwoWay}" Command="{x:Bind ViewModel.ToggleLockScreenCommand}" OnContent="Armed" OffContent="Disarmed" />
+                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsLockScreenArmed, Mode=TwoWay}" OnContent="Armed" OffContent="Disarmed" />
             </Grid>
         </Border>
 

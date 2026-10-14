@@ -20,6 +20,14 @@ public partial class SecurityGuardianViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLockScreenArmed = true;
 
+    partial void OnIsLockScreenArmedChanged(bool value)
+    {
+        ShieldStatus = value
+            ? "LockScreen Guardian Active (Armed)"
+            : "LockScreen Guardian Standby (Disarmed)";
+        ActionFeedback = $"LockScreen guardian {(value ? "armed" : "disarmed")}.";
+    }
+
     [ObservableProperty]
     private string _shieldStatus = "LockScreen Guardian Active (0 Violations)";
 
@@ -60,10 +68,13 @@ public partial class SecurityGuardianViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public void SetTier(int tierLevel)
+    public void SetTier(object? tierLevel)
     {
-        ActiveTier = (SecurityTierLevel)tierLevel;
-        ActionFeedback = $"Active confirmation tier switched to: {ActiveTier}";
+        if (tierLevel != null && int.TryParse(tierLevel.ToString(), out int val))
+        {
+            ActiveTier = (SecurityTierLevel)val;
+            ActionFeedback = $"Active confirmation tier switched to: {ActiveTier}";
+        }
     }
 
     [RelayCommand]

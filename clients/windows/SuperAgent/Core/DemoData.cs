@@ -32,6 +32,9 @@ public record WindowTargetItem
     [JsonPropertyName("isOccluded")]
     public bool IsOccluded { get; init; }
 
+    [JsonIgnore]
+    public string OcclusionStatus => IsOccluded ? "Occluded" : "Visible";
+
     [JsonPropertyName("bounds")]
     public string Bounds { get; init; } = "1920x1080+0+0";
 }

@@ -33,6 +33,13 @@ public partial class ComputerUseViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSettled = true;
 
+    public bool IsSettling => !IsSettled;
+
+    partial void OnIsSettledChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsSettling));
+    }
+
     [ObservableProperty]
     private bool _isCapturing = true;
 

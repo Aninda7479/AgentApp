@@ -41,7 +41,7 @@ public partial class CreativeStudioViewModel : ObservableObject
     private string _selectedEngine = "Flux.1 Dev";
 
     [ObservableProperty]
-    private int _steps = 28;
+    private double _steps = 28;
 
     [ObservableProperty]
     private double _cfgScale = 7.0;
@@ -117,7 +117,7 @@ public partial class CreativeStudioViewModel : ObservableObject
             AspectRatio = SelectedAspectRatio,
             Engine = SelectedEngine,
             Seed = System.Random.Shared.Next(100000, 999999),
-            Steps = Steps,
+            Steps = (int)Steps,
             CfgScale = CfgScale,
             PaletteName = SelectedPalette?.Name ?? "Custom",
             PreviewHex = "#312E81"

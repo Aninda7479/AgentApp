@@ -34,11 +34,11 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBox Text="{x:Bind ViewModel.NewTaskTitle, Mode=TwoWay}" PlaceholderText="Enter new agent task (e.g. Audit dependencies)..." />
-                    <ComboBox Grid.Column="1" SelectedValue="{x:Bind ViewModel.NewTaskPersona, Mode=TwoWay}" HorizontalAlignment="Stretch">
-                        <x:String>Code Janitor</x:String>
-                        <x:String>Windows Specialist</x:String>
-                        <x:String>Security Guardian</x:String>
-                        <x:String>Hardware Co-Pilot</x:String>
+                    <ComboBox Grid.Column="1" SelectedValue="{x:Bind ViewModel.NewTaskPersona, Mode=TwoWay}" SelectedValuePath="Content" HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="Code Janitor" />
+                        <ComboBoxItem Content="Windows Specialist" />
+                        <ComboBoxItem Content="Security Guardian" />
+                        <ComboBoxItem Content="Hardware Co-Pilot" />
                     </ComboBox>
                     <Button Grid.Column="2" Command="{x:Bind ViewModel.AddTaskCommand}" Style="{ThemeResource AccentButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="6">

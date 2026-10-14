@@ -22,7 +22,7 @@
                 </StackPanel>
                 <Border Grid.Column="1" Background="{ThemeResource LayerFillColorAltBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="8" Padding="12,6" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ProgressRing IsActive="{x:Bind ViewModel.IsSettled, Mode=OneWay, Converter={StaticResource InverseBoolToVis}}" Width="16" Height="16" />
+                        <ProgressRing IsActive="{x:Bind ViewModel.IsSettling, Mode=OneWay}" Width="16" Height="16" />
                         <TextBlock Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}" FontSize="12" FontWeight="Medium" />
                     </StackPanel>
                 </Border>
@@ -69,7 +69,7 @@
                                     </StackPanel>
                                     <TextBlock Grid.Column="2" Text="{x:Bind Bounds}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                     <Border Grid.Column="3" CornerRadius="4" Padding="6,2" Background="{ThemeResource LayerFillColorAltBrush}">
-                                        <TextBlock Text="{x:Bind IsOccluded, Converter={StaticResource BoolToVis}}" FontSize="10" FontWeight="SemiBold" Foreground="#F59E0B" />
+                                        <TextBlock Text="{x:Bind OcclusionStatus}" FontSize="10" FontWeight="SemiBold" Foreground="#F59E0B" />
                                     </Border>
                                 </Grid>
                             </DataTemplate>

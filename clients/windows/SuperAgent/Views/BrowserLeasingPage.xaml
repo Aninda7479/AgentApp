@@ -1,4 +1,5 @@
 <Page
+    x:Name="ThisPage"
     x:Class="SuperAgent.Views.BrowserLeasingPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -33,9 +34,9 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <ComboBox SelectedValue="{x:Bind ViewModel.SelectedTier, Mode=TwoWay}" Width="180">
-                        <x:String>createTab</x:String>
-                        <x:String>claimExistingTab</x:String>
+                    <ComboBox SelectedValue="{x:Bind ViewModel.SelectedTier, Mode=TwoWay}" SelectedValuePath="Content" Width="180">
+                        <ComboBoxItem Content="createTab" />
+                        <ComboBoxItem Content="claimExistingTab" />
                     </ComboBox>
                     <TextBox Grid.Column="1" Text="{x:Bind ViewModel.NewTabUrl, Mode=TwoWay}" PlaceholderText="Enter URL to lease (e.g. https://stripe.com)..." />
                     <Button Grid.Column="2" Command="{x:Bind ViewModel.LeaseNewTabCommand}" Style="{ThemeResource AccentButtonStyle}">
@@ -95,7 +96,7 @@
                                         <TextBlock Text="{x:Bind RemainingSeconds}" FontSize="12" FontWeight="Bold" Foreground="#8B5CF6" />
                                         <TextBlock Text="s left" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
-                                    <Button Grid.Column="2" Command="{x:Bind ((vm:BrowserLeasingViewModel)DataContext).ReleaseLeaseCommand, ElementName=RootPanel}" CommandParameter="{x:Bind}" Style="{ThemeResource DefaultButtonStyle}">
+                                    <Button Grid.Column="2" Command="{Binding Path=DataContext.ReleaseLeaseCommand, ElementName=ThisPage}" CommandParameter="{Binding}" Style="{ThemeResource DefaultButtonStyle}">
                                         <TextBlock Text="Release Lease" FontSize="11" />
                                     </Button>
                                 </Grid>
