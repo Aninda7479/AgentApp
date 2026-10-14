@@ -71,6 +71,7 @@ pub struct CardRenderContext<'a> {
 pub enum CardAction {
     SubmitQuery(String),
     CopyText(String),
+    CopyImage,
     Redraw,
     Close,
 }
@@ -250,22 +251,6 @@ pub fn render_hero_card(
                             pending_action = Some(CardAction::Close);
                         }
 
-                        if render_ctx.ai_response.is_some() {
-                            let label = if render_ctx.copied_toast_timer > 0.0
-                                && render_ctx.copied_toast_msg.contains("Text")
-                            {
-                                "✓ Copied"
-                            } else {
-                                "📋 Copy"
-                            };
-                            let copy_btn = action_button(label, false);
-                            if ui.add(copy_btn).clicked() {
-                                if let Some(ref text) = render_ctx.ai_response {
-                                    pending_action = Some(CardAction::CopyText(text.clone()));
-                                }
-                            }
-                        }
-
                         if render_ctx.selection_rect.is_some() {
                             let redraw_btn = action_button("🔄 Redraw", false);
                             if ui
@@ -274,6 +259,43 @@ pub fn render_hero_card(
                                 .clicked()
                             {
                                 pending_action = Some(CardAction::Redraw);
+                            }
+
+                            let img_label = if render_ctx.copied_toast_timer > 0.0
+                                && (render_ctx.copied_toast_msg.contains("Screenshot")
+                                    || render_ctx.copied_toast_msg.contains("Image"))
+                            {
+                                "✓ Image Copied"
+                            } else {
+                                "📷 Copy Image"
+                            };
+                            let copy_img_btn = action_button(img_label, false);
+                            if ui
+                                .add(copy_img_btn)
+                                .on_hover_text("Copy selected area screenshot image to clipboard (Ctrl+Shift+C)")
+                                .clicked()
+                            {
+                                pending_action = Some(CardAction::CopyImage);
+                            }
+                        }
+
+                        if render_ctx.ai_response.is_some() {
+                            let text_label = if render_ctx.copied_toast_timer > 0.0
+                                && render_ctx.copied_toast_msg.contains("Text")
+                            {
+                                "✓ Text Copied"
+                            } else {
+                                "📋 Copy Text"
+                            };
+                            let copy_text_btn = action_button(text_label, false);
+                            if ui
+                                .add(copy_text_btn)
+                                .on_hover_text("Copy AI text insights to clipboard (Ctrl+C)")
+                                .clicked()
+                            {
+                                if let Some(ref text) = render_ctx.ai_response {
+                                    pending_action = Some(CardAction::CopyText(text.clone()));
+                                }
                             }
                         }
                     });

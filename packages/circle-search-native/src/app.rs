@@ -2,7 +2,9 @@ use egui::{Color32, Id, Key, LayerId, Order, Pos2, Rect, Rounding};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::api::query_circle_search;
-use crate::capture::{crop_to_base64_jpeg, crop_to_color_image, CapturedScreen};
+use crate::capture::{
+    crop_to_base64_jpeg, crop_to_color_image, crop_to_image_data, CapturedScreen,
+};
 use crate::card::{render_hero_card, CardAction, CardRenderContext};
 use crate::theme;
 
@@ -177,6 +179,28 @@ impl CircleSearchApp {
         });
     }
 
+    fn copy_image_to_clipboard(&mut self, ctx: &egui::Context) {
+        let (px, py, pw, ph) = if let Some(rect) = self.selection_rect {
+            self.get_pixel_crop_coords(ctx, rect)
+        } else {
+            (
+                0,
+                0,
+                self.screen_info.image.width(),
+                self.screen_info.image.height(),
+            )
+        };
+
+        if let Ok(img_data) = crop_to_image_data(&self.screen_info.image, px, py, pw, ph) {
+            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                if clipboard.set_image(img_data).is_ok() {
+                    self.copied_toast_timer = 2.0;
+                    self.copied_toast_msg = "✓ Screenshot copied to clipboard".to_string();
+                }
+            }
+        }
+    }
+
     fn copy_text_to_clipboard(&mut self, text: &str) {
         if let Ok(mut clipboard) = arboard::Clipboard::new() {
             if clipboard.set_text(text.to_string()).is_ok() {
@@ -233,6 +257,24 @@ impl eframe::App for CircleSearchApp {
         // Escape hides the overlay without quitting
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
             self.hide_overlay(ctx);
+        }
+
+        // Ctrl+Shift+C copies the screenshot image to clipboard
+        if ctx.input(|i| {
+            (i.modifiers.ctrl || i.modifiers.command) && i.modifiers.shift && i.key_pressed(Key::C)
+        }) {
+            self.copy_image_to_clipboard(ctx);
+        }
+
+        // Ctrl+C copies AI text if available, or screenshot image if selection is active
+        if ctx.input(|i| {
+            (i.modifiers.ctrl || i.modifiers.command) && !i.modifiers.shift && i.key_pressed(Key::C)
+        }) {
+            if let Some(text) = self.ai_response.clone() {
+                self.copy_text_to_clipboard(&text);
+            } else if self.selection_rect.is_some() {
+                self.copy_image_to_clipboard(ctx);
+            }
         }
 
         // 4. Draw Captured Desktop Background
@@ -333,6 +375,9 @@ impl eframe::App for CircleSearchApp {
                 }
                 CardAction::CopyText(t) => {
                     self.copy_text_to_clipboard(&t);
+                }
+                CardAction::CopyImage => {
+                    self.copy_image_to_clipboard(ctx);
                 }
                 CardAction::Redraw => {
                     self.selection_rect = None;
