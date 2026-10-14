@@ -59,8 +59,7 @@ pub struct CardRenderContext<'a> {
     pub query: &'a mut String,
     pub follow_up_query: &'a mut String,
     pub is_loading: bool,
-    pub is_lens_active: &'a mut bool,
-    pub is_fullscreen_mode: &'a mut bool,
+    pub is_interact_mode: bool,
     pub ai_response: &'a Option<String>,
     pub error_msg: &'a Option<String>,
     pub selection_rect: &'a mut Option<Rect>,
@@ -73,6 +72,8 @@ pub enum CardAction {
     CopyText(String),
     CopyImage,
     Redraw,
+    Recapture,
+    ToggleMoveScreen,
     Close,
 }
 
@@ -86,19 +87,30 @@ pub fn render_hero_card(
 ) -> Option<CardAction> {
     let mut pending_action = None;
 
-    let is_expanded = render_ctx.selection_rect.is_some()
-        || render_ctx.ai_response.is_some()
-        || render_ctx.is_loading
-        || render_ctx.error_msg.is_some();
+    let is_expanded = !render_ctx.is_interact_mode
+        && (render_ctx.selection_rect.is_some()
+            || render_ctx.ai_response.is_some()
+            || render_ctx.is_loading
+            || render_ctx.error_msg.is_some());
 
-    let card_w = if is_expanded { 580.0f32 } else { 460.0f32 };
-    let default_pos = if is_expanded {
-        Pos2::new((screen_rect.max.x - card_w - 32.0).max(20.0), 36.0)
+    let card_w = if render_ctx.is_interact_mode {
+        480.0f32
+    } else if is_expanded {
+        580.0f32
     } else {
-        Pos2::new((screen_rect.max.x - card_w - 48.0).max(20.0), 48.0)
+        460.0f32
     };
 
-    let active_pos = card_pos.unwrap_or(default_pos);
+    let active_pos = if render_ctx.is_interact_mode {
+        Pos2::ZERO
+    } else {
+        let default_pos = if is_expanded {
+            Pos2::new((screen_rect.max.x - card_w - 32.0).max(20.0), 36.0)
+        } else {
+            Pos2::new((screen_rect.max.x - card_w - 48.0).max(20.0), 48.0)
+        };
+        card_pos.unwrap_or(default_pos)
+    };
 
     let window_response = egui::Window::new("SuperAgent Visual Intelligence")
         .id(Id::new("superagent_visual_search_card"))
@@ -116,15 +128,88 @@ pub fn render_hero_card(
                 egui::Sense::drag(),
             );
 
-            if title_response.dragged() {
-                *is_dragging_card = true;
-                let new_pos = active_pos + title_response.drag_delta();
-                *card_pos = Some(new_pos);
-            } else if !title_response.dragged() && *is_dragging_card {
-                *is_dragging_card = false;
+            if !render_ctx.is_interact_mode {
+                if title_response.dragged() {
+                    *is_dragging_card = true;
+                    let new_pos = active_pos + title_response.drag_delta();
+                    *card_pos = Some(new_pos);
+                } else if !title_response.dragged() && *is_dragging_card {
+                    *is_dragging_card = false;
+                }
             }
 
-            if !is_expanded {
+            if render_ctx.is_interact_mode {
+                // ── LIVE DESKTOP / MOVE SCREEN STATE ─────────────────────────
+                ui.horizontal(|ui| {
+                    // Cyan glowing live dot
+                    let (dot_rect, _) =
+                        ui.allocate_exact_size(vec2(10.0, 10.0), egui::Sense::hover());
+                    ui.painter().circle_filled(dot_rect.center(), 4.5, COLOR_ACCENT_CYAN);
+                    ui.painter().circle_stroke(
+                        dot_rect.center(),
+                        6.5,
+                        Stroke::new(1.0, Color32::from_rgba_unmultiplied(100, 210, 255, 80)),
+                    );
+
+                    ui.add_space(2.0);
+                    ui.label(
+                        egui::RichText::new("SuperAgent Live")
+                            .font(FontId::proportional(13.5))
+                            .strong()
+                            .color(COLOR_TEXT_MAIN),
+                    );
+
+                    ui.label(
+                        egui::RichText::new("Unlocked")
+                            .font(FontId::proportional(11.0))
+                            .color(COLOR_ACCENT_CYAN),
+                    );
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let close_btn = egui::Button::new(
+                            egui::RichText::new("✕").size(11.0).color(COLOR_TEXT_MUTED),
+                        )
+                        .fill(COLOR_BORDER_SUBTLE)
+                        .rounding(Rounding::same(8.0));
+                        if ui
+                            .add(close_btn)
+                            .on_hover_text("Hide overlay (Esc)")
+                            .clicked()
+                        {
+                            pending_action = Some(CardAction::Close);
+                        }
+
+                        let freeze_btn = action_button("✦ Freeze & Circle", true);
+                        if ui
+                            .add(freeze_btn)
+                            .on_hover_text("Freeze current screen and start circling (Space)")
+                            .clicked()
+                        {
+                            pending_action = Some(CardAction::ToggleMoveScreen);
+                        }
+
+                        let recap_btn = action_button("📸 Recapture", false);
+                        if ui
+                            .add(recap_btn)
+                            .on_hover_text("Take a fresh screen capture (F5)")
+                            .clicked()
+                        {
+                            pending_action = Some(CardAction::Recapture);
+                        }
+                    });
+                });
+
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(
+                            "Desktop is interactive: scroll or switch windows freely • Press Space to Freeze & Circle",
+                        )
+                        .font(FontId::proportional(11.0))
+                        .color(COLOR_TEXT_DIM),
+                    );
+                });
+            } else if !is_expanded {
                 // ── COMPACT STATE: Hero Omnibox ──────────────────────────────
                 ui.horizontal(|ui| {
                     // Terracotta glowing brand mark
@@ -146,16 +231,10 @@ pub fn render_hero_card(
                             .color(COLOR_TEXT_MAIN),
                     );
 
-                    ui.label(
-                        egui::RichText::new("Visual Search")
-                            .font(FontId::proportional(12.0))
-                            .color(COLOR_TEXT_MUTED),
-                    );
-
                     #[cfg(target_os = "macos")]
-                    let shortcut_hint = "⌘+Shift+S";
+                    let shortcut_hint = "⌘+Shift+C";
                     #[cfg(not(target_os = "macos"))]
-                    let shortcut_hint = "Ctrl+Shift+S";
+                    let shortcut_hint = "Ctrl+Shift+C";
 
                     ui.label(
                         egui::RichText::new(shortcut_hint)
@@ -169,8 +248,30 @@ pub fn render_hero_card(
                         )
                         .fill(COLOR_BORDER_SUBTLE)
                         .rounding(Rounding::same(8.0));
-                        if ui.add(close_btn).clicked() {
+                        if ui
+                            .add(close_btn)
+                            .on_hover_text("Hide overlay (Esc)")
+                            .clicked()
+                        {
                             pending_action = Some(CardAction::Close);
+                        }
+
+                        let move_btn = action_button("🔓 Move Screen", false);
+                        if ui
+                            .add(move_btn)
+                            .on_hover_text("Unlock screen to scroll or switch windows (Space)")
+                            .clicked()
+                        {
+                            pending_action = Some(CardAction::ToggleMoveScreen);
+                        }
+
+                        let recap_btn = action_button("📸 Recapture", false);
+                        if ui
+                            .add(recap_btn)
+                            .on_hover_text("Recapture screen under cursor (F5)")
+                            .clicked()
+                        {
+                            pending_action = Some(CardAction::Recapture);
                         }
                     });
                 });
@@ -192,36 +293,16 @@ pub fn render_hero_card(
                         pending_action = Some(CardAction::SubmitQuery(q));
                     }
 
-                    ui.add_space(8.0);
+                    ui.add_space(6.0);
 
                     ui.horizontal(|ui| {
-                        let share_btn = egui::Button::new(
-                            egui::RichText::new("🖥 Fullscreen").size(11.0).color(
-                                if *render_ctx.is_fullscreen_mode {
-                                    Color32::WHITE
-                                } else {
-                                    COLOR_TEXT_MAIN
-                                },
-                            ),
-                        )
-                        .fill(if *render_ctx.is_fullscreen_mode {
-                            COLOR_ACCENT_TERRACOTTA
-                        } else {
-                            theme::COLOR_BG_BTN
-                        })
-                        .stroke(Stroke::new(1.0, theme::COLOR_BORDER_SUBTLE))
-                        .rounding(Rounding::same(8.0));
-
-                        if ui.add(share_btn).clicked() {
-                            *render_ctx.is_fullscreen_mode = !*render_ctx.is_fullscreen_mode;
-                        }
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let lens_btn = action_button("✦ Visual Lens", true);
-                            if ui.add(lens_btn).clicked() {
-                                *render_ctx.is_lens_active = true;
-                            }
-                        });
+                        ui.label(
+                            egui::RichText::new(
+                                "Circle anything on screen • 🔓 Move Screen to scroll • Esc to hide",
+                            )
+                            .font(FontId::proportional(10.5))
+                            .color(COLOR_TEXT_DIM),
+                        );
                     });
                 });
             } else {
@@ -272,7 +353,7 @@ pub fn render_hero_card(
                             let copy_img_btn = action_button(img_label, false);
                             if ui
                                 .add(copy_img_btn)
-                                .on_hover_text("Copy selected area screenshot image to clipboard (Ctrl+Shift+C)")
+                                .on_hover_text("Copy selected area screenshot image to clipboard (Ctrl+C)")
                                 .clicked()
                             {
                                 pending_action = Some(CardAction::CopyImage);
@@ -297,6 +378,24 @@ pub fn render_hero_card(
                                     pending_action = Some(CardAction::CopyText(text.clone()));
                                 }
                             }
+                        }
+
+                        let recap_btn = action_button("📸 Recapture", false);
+                        if ui
+                            .add(recap_btn)
+                            .on_hover_text("Recapture screen with current view (F5)")
+                            .clicked()
+                        {
+                            pending_action = Some(CardAction::Recapture);
+                        }
+
+                        let move_btn = action_button("🔓 Move Screen", false);
+                        if ui
+                            .add(move_btn)
+                            .on_hover_text("Unlock screen to scroll or navigate (Space)")
+                            .clicked()
+                        {
+                            pending_action = Some(CardAction::ToggleMoveScreen);
                         }
                     });
                 });
@@ -432,7 +531,7 @@ pub fn render_hero_card(
                     ui.horizontal(|ui| {
                         ui.label(
                             egui::RichText::new(
-                                "Press Enter to send • Esc to hide • Ctrl+Q to quit",
+                                "Press Enter to send • F5 to recapture • Space to move screen • Esc to hide",
                             )
                             .font(FontId::proportional(10.5))
                             .color(COLOR_TEXT_DIM),

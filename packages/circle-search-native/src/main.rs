@@ -10,7 +10,7 @@ use app::CircleSearchApp;
 use capture::capture_active_screen;
 
 #[cfg(target_os = "windows")]
-fn spawn_hotkey_listener() -> std::sync::mpsc::Receiver<()> {
+fn spawn_hotkey_listener(egui_ctx: egui::Context) -> std::sync::mpsc::Receiver<()> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         #[allow(clippy::upper_case_acronyms)]
@@ -27,6 +27,13 @@ fn spawn_hotkey_listener() -> std::sync::mpsc::Receiver<()> {
 
         #[link(name = "user32")]
         extern "system" {
+            fn PeekMessageW(
+                msg: *mut MSG,
+                hwnd: *mut std::ffi::c_void,
+                w_msg_filter_min: u32,
+                w_msg_filter_max: u32,
+                w_remove_msg: u32,
+            ) -> i32;
             fn RegisterHotKey(
                 hwnd: *mut std::ffi::c_void,
                 id: i32,
@@ -44,22 +51,46 @@ fn spawn_hotkey_listener() -> std::sync::mpsc::Receiver<()> {
         const MOD_CONTROL: u32 = 0x0002;
         const MOD_SHIFT: u32 = 0x0004;
         const MOD_NOREPEAT: u32 = 0x4000;
+        const VK_C: u32 = 0x43;
         const VK_S: u32 = 0x53;
         const WM_HOTKEY: u32 = 0x0312;
 
         unsafe {
-            if RegisterHotKey(
+            // Ensure thread has a Win32 message queue prior to RegisterHotKey
+            let mut dummy: MSG = std::mem::zeroed();
+            PeekMessageW(&mut dummy as *mut MSG, std::ptr::null_mut(), 0, 0, 0);
+
+            // Register Ctrl+Shift+C (hotkey ID 1001)
+            let mut reg_c = RegisterHotKey(
                 std::ptr::null_mut(),
                 1001,
                 MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
+                VK_C,
+            );
+            if reg_c == 0 {
+                reg_c = RegisterHotKey(std::ptr::null_mut(), 1001, MOD_CONTROL | MOD_SHIFT, VK_C);
+            }
+
+            // Register Ctrl+Shift+S (hotkey ID 1002)
+            let mut reg_s = RegisterHotKey(
+                std::ptr::null_mut(),
+                1002,
+                MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
                 VK_S,
-            ) != 0
-            {
-                let mut msg: MSG = std::mem::zeroed();
-                while GetMessageW(&mut msg as *mut MSG, std::ptr::null_mut(), 0, 0) > 0 {
-                    if msg.message == WM_HOTKEY {
-                        let _ = tx.send(());
-                    }
+            );
+            if reg_s == 0 {
+                reg_s = RegisterHotKey(std::ptr::null_mut(), 1002, MOD_CONTROL | MOD_SHIFT, VK_S);
+            }
+
+            if reg_c == 0 && reg_s == 0 {
+                eprintln!("[CircleSearch] Warning: Failed to register global hotkey (Ctrl+Shift+C / Ctrl+Shift+S)");
+            }
+
+            let mut msg: MSG = std::mem::zeroed();
+            while GetMessageW(&mut msg as *mut MSG, std::ptr::null_mut(), 0, 0) > 0 {
+                if msg.message == WM_HOTKEY {
+                    let _ = tx.send(());
+                    egui_ctx.request_repaint();
                 }
             }
         }
@@ -68,7 +99,7 @@ fn spawn_hotkey_listener() -> std::sync::mpsc::Receiver<()> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn spawn_hotkey_listener() -> std::sync::mpsc::Receiver<()> {
+fn spawn_hotkey_listener(_egui_ctx: egui::Context) -> std::sync::mpsc::Receiver<()> {
     let (_tx, rx) = std::sync::mpsc::channel();
     rx
 }
@@ -94,10 +125,7 @@ fn main() -> eframe::Result<()> {
     let screen_w = captured.width as f32;
     let screen_h = captured.height as f32;
 
-    // 2. Start global hotkey listener (Ctrl+Shift+S) for resident background execution
-    let hotkey_rx = spawn_hotkey_listener();
-
-    // 3. Configure native eframe viewport options for seamless transparent overlay
+    // 2. Configure native eframe viewport options for seamless transparent overlay
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("SuperAgent — Circle to Search")
@@ -118,6 +146,8 @@ fn main() -> eframe::Result<()> {
         Box::new(move |cc| {
             // Configure dark mode visuals
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            // Start global hotkey listener wired directly to egui_ctx to wake the loop from hidden state
+            let hotkey_rx = spawn_hotkey_listener(cc.egui_ctx.clone());
             Ok(Box::new(CircleSearchApp::new(captured, cc, hotkey_rx)))
         }),
     )

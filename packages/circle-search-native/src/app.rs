@@ -18,7 +18,8 @@ pub struct CircleSearchApp {
     selection_rect: Option<Rect>,
     is_drawing: bool,
     is_lens_active: bool,
-    is_fullscreen_mode: bool,
+    is_interact_mode: bool,
+    is_visible: bool,
 
     query: String,
     follow_up_query: String,
@@ -34,6 +35,8 @@ pub struct CircleSearchApp {
 
     response_rx: Receiver<Result<String, String>>,
     response_tx: Sender<Result<String, String>>,
+    recapture_rx: Receiver<Result<CapturedScreen, String>>,
+    recapture_tx: Sender<Result<CapturedScreen, String>>,
     hotkey_rx: Receiver<()>,
 }
 
@@ -56,6 +59,7 @@ impl CircleSearchApp {
         ));
 
         let (tx, rx) = channel();
+        let (recap_tx, recap_rx) = channel();
 
         Self {
             screen_info: captured,
@@ -66,7 +70,8 @@ impl CircleSearchApp {
             selection_rect: None,
             is_drawing: false,
             is_lens_active: false,
-            is_fullscreen_mode: false,
+            is_interact_mode: false,
+            is_visible: true,
             query: String::new(),
             follow_up_query: String::new(),
             active_mode: "general".to_string(),
@@ -79,6 +84,8 @@ impl CircleSearchApp {
             is_dragging_card: false,
             response_rx: rx,
             response_tx: tx,
+            recapture_rx: recap_rx,
+            recapture_tx: recap_tx,
             hotkey_rx,
         }
     }
@@ -90,7 +97,8 @@ impl CircleSearchApp {
         self.drag_current = None;
         self.is_drawing = false;
         self.is_lens_active = false;
-        self.is_fullscreen_mode = false;
+        self.is_interact_mode = false;
+        self.is_visible = false;
         self.query.clear();
         self.follow_up_query.clear();
         self.is_loading = false;
@@ -117,13 +125,43 @@ impl CircleSearchApp {
         self.drag_current = None;
         self.is_drawing = false;
         self.is_lens_active = false;
-        self.is_fullscreen_mode = false;
+        self.is_interact_mode = false;
+        self.is_visible = true;
         self.query.clear();
         self.follow_up_query.clear();
         self.is_loading = false;
         self.ai_response = None;
         self.error_msg = None;
         self.card_pos = None;
+    }
+
+    pub fn trigger_recapture(&mut self, ctx: &egui::Context) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        let tx = self.recapture_tx.clone();
+        let egui_ctx = ctx.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            let fresh = crate::capture::capture_active_screen();
+            let _ = tx.send(fresh);
+            egui_ctx.request_repaint();
+        });
+    }
+
+    pub fn toggle_interact_mode(&mut self, ctx: &egui::Context) {
+        self.is_interact_mode = !self.is_interact_mode;
+        if self.is_interact_mode {
+            let card_w = 480.0f32;
+            let card_h = 100.0f32;
+            let def_x = (self.screen_info.origin_x + self.screen_info.width as f32 - card_w - 32.0)
+                .max(20.0);
+            let def_y = self.screen_info.origin_y + 36.0;
+            let pos = self.card_pos.unwrap_or(Pos2::new(def_x, def_y));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(card_w, card_h)));
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+            ctx.request_repaint();
+        } else {
+            self.trigger_recapture(ctx);
+        }
     }
 
     fn get_pixel_crop_coords(&self, ctx: &egui::Context, rect: Rect) -> (u32, u32, u32, u32) {
@@ -213,23 +251,56 @@ impl CircleSearchApp {
 
 impl eframe::App for CircleSearchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // 0. Background Hotkey listener (Ctrl+Shift+S)
+        // 0. Background Hotkey listener (Ctrl+Shift+C / Ctrl+Shift+S)
         if self.hotkey_rx.try_recv().is_ok() {
-            if let Ok(fresh) = crate::capture::capture_active_screen() {
-                let w = fresh.width as f32;
-                let h = fresh.height as f32;
-                let ox = fresh.origin_x;
-                let oy = fresh.origin_y;
-                self.reload_screen(ctx, fresh);
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
-                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(ox, oy)));
+            if self.is_visible {
+                self.trigger_recapture(ctx);
+            } else {
+                if let Ok(fresh) = crate::capture::capture_active_screen() {
+                    let w = fresh.width as f32;
+                    let h = fresh.height as f32;
+                    let ox = fresh.origin_x;
+                    let oy = fresh.origin_y;
+                    self.reload_screen(ctx, fresh);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(ox, oy)));
+                }
+                self.is_visible = true;
+                self.is_interact_mode = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                ctx.request_repaint();
             }
+        }
+
+        // 1. Process asynchronous screen recapture results
+        if let Ok(res) = self.recapture_rx.try_recv() {
+            match res {
+                Ok(fresh) => {
+                    let w = fresh.width as f32;
+                    let h = fresh.height as f32;
+                    let ox = fresh.origin_x;
+                    let oy = fresh.origin_y;
+                    self.reload_screen(ctx, fresh);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, h)));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(ox, oy)));
+                    self.is_interact_mode = false;
+                    self.copied_toast_timer = 2.0;
+                    self.copied_toast_msg = "✓ Screen updated".to_string();
+                }
+                Err(err) => {
+                    self.error_msg = Some(format!("Recapture failed: {}", err));
+                }
+            }
+            self.is_visible = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             ctx.request_repaint();
         }
 
-        // 1. Process async intelligence response
+        // 2. Process async intelligence response
         if let Ok(res) = self.response_rx.try_recv() {
             self.is_loading = false;
             match res {
@@ -242,13 +313,13 @@ impl eframe::App for CircleSearchApp {
             }
         }
 
-        // 2. Decrement toast notification timer
+        // 3. Decrement toast notification timer
         if self.copied_toast_timer > 0.0 {
             self.copied_toast_timer -= ctx.input(|i| i.unstable_dt);
             ctx.request_repaint();
         }
 
-        // 3. Global keyboard handlers:
+        // 4. Keyboard handlers:
         // Ctrl+Q / Cmd+Q quits the application entirely
         if ctx.input(|i| (i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(Key::Q)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -259,11 +330,18 @@ impl eframe::App for CircleSearchApp {
             self.hide_overlay(ctx);
         }
 
-        // Ctrl+Shift+C copies the screenshot image to clipboard
+        // F5 or Ctrl+R triggers instant screen recapture
         if ctx.input(|i| {
-            (i.modifiers.ctrl || i.modifiers.command) && i.modifiers.shift && i.key_pressed(Key::C)
+            i.key_pressed(Key::F5)
+                || ((i.modifiers.ctrl || i.modifiers.command) && i.key_pressed(Key::R))
         }) {
-            self.copy_image_to_clipboard(ctx);
+            self.trigger_recapture(ctx);
+        }
+
+        // Space toggles Move Screen mode when text fields are not focused
+        let has_text_focus = ctx.memory(|m| m.focused().is_some());
+        if !has_text_focus && ctx.input(|i| i.key_pressed(Key::Space)) {
+            self.toggle_interact_mode(ctx);
         }
 
         // Ctrl+C copies AI text if available, or screenshot image if selection is active
@@ -277,84 +355,87 @@ impl eframe::App for CircleSearchApp {
             }
         }
 
-        // 4. Draw Captured Desktop Background
         let screen_rect = ctx.screen_rect();
-        let painter = ctx.layer_painter(LayerId::new(Order::Background, Id::new("screen_canvas")));
 
-        if let Some(ref tex) = self.screen_texture {
-            painter.image(
-                tex.id(),
-                screen_rect,
-                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                Color32::WHITE,
-            );
-        }
+        // 5. Draw Captured Desktop Background & Marquee (only when in circle freeze mode)
+        if !self.is_interact_mode {
+            let painter =
+                ctx.layer_painter(LayerId::new(Order::Background, Id::new("screen_canvas")));
 
-        // 5. Mouse Drag & Region Selection
-        let pointer = ctx.input(|i| i.pointer.clone());
-        let is_over_card = self.is_dragging_card;
+            if let Some(ref tex) = self.screen_texture {
+                painter.image(
+                    tex.id(),
+                    screen_rect,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            }
 
-        if !is_over_card {
-            if pointer.primary_pressed() {
-                if let Some(pos) = pointer.hover_pos() {
-                    self.drag_start = Some(pos);
-                    self.drag_current = Some(pos);
-                    self.is_drawing = true;
-                    self.is_lens_active = true;
-                }
-            } else if pointer.primary_down() && self.is_drawing {
-                if let Some(pos) = pointer.hover_pos() {
-                    self.drag_current = Some(pos);
-                }
-            } else if pointer.primary_released() && self.is_drawing {
-                self.is_drawing = false;
-                if let (Some(start), Some(curr)) = (self.drag_start, self.drag_current) {
-                    let rect = Rect::from_two_pos(start, curr);
-                    if rect.width() > 15.0 && rect.height() > 15.0 {
-                        self.selection_rect = Some(rect);
-                        self.update_crop_texture(ctx, rect);
-                        self.start_analysis(ctx, self.query.clone(), "general".to_string());
+            // Mouse Drag & Region Selection
+            let pointer = ctx.input(|i| i.pointer.clone());
+            let is_over_card = self.is_dragging_card;
+
+            if !is_over_card {
+                if pointer.primary_pressed() {
+                    if let Some(pos) = pointer.hover_pos() {
+                        self.drag_start = Some(pos);
+                        self.drag_current = Some(pos);
+                        self.is_drawing = true;
+                        self.is_lens_active = true;
+                    }
+                } else if pointer.primary_down() && self.is_drawing {
+                    if let Some(pos) = pointer.hover_pos() {
+                        self.drag_current = Some(pos);
+                    }
+                } else if pointer.primary_released() && self.is_drawing {
+                    self.is_drawing = false;
+                    if let (Some(start), Some(curr)) = (self.drag_start, self.drag_current) {
+                        let rect = Rect::from_two_pos(start, curr);
+                        if rect.width() > 15.0 && rect.height() > 15.0 {
+                            self.selection_rect = Some(rect);
+                            self.update_crop_texture(ctx, rect);
+                            self.start_analysis(ctx, self.query.clone(), "general".to_string());
+                        }
                     }
                 }
             }
-        }
 
-        // Determine current marquee rectangle
-        let current_rect = if self.is_drawing {
-            if let (Some(start), Some(curr)) = (self.drag_start, self.drag_current) {
-                let r = Rect::from_two_pos(start, curr);
-                if r.width() > 5.0 && r.height() > 5.0 {
-                    Some(r)
+            // Determine current marquee rectangle
+            let current_rect = if self.is_drawing {
+                if let (Some(start), Some(curr)) = (self.drag_start, self.drag_current) {
+                    let r = Rect::from_two_pos(start, curr);
+                    if r.width() > 5.0 && r.height() > 5.0 {
+                        Some(r)
+                    } else {
+                        self.selection_rect
+                    }
                 } else {
                     self.selection_rect
                 }
             } else {
                 self.selection_rect
+            };
+
+            // Draw Dimmed Mask & Radiant Marquee
+            if let Some(rect) = current_rect {
+                theme::paint_cutout_mask(&painter, screen_rect, rect);
+                theme::paint_selection_marquee(&painter, rect);
+            } else if self.is_lens_active {
+                painter.rect_filled(screen_rect, Rounding::ZERO, theme::COLOR_BG_OVERLAY);
             }
-        } else {
-            self.selection_rect
-        };
 
-        // 6. Draw Dimmed Mask & Radiant Marquee
-        if let Some(rect) = current_rect {
-            theme::paint_cutout_mask(&painter, screen_rect, rect);
-            theme::paint_selection_marquee(&painter, rect);
-        } else if self.is_lens_active {
-            painter.rect_filled(screen_rect, Rounding::ZERO, theme::COLOR_BG_OVERLAY);
+            // Draw Toast Notification
+            if self.copied_toast_timer > 0.0 && !self.copied_toast_msg.is_empty() {
+                theme::paint_toast(&painter, screen_rect, &self.copied_toast_msg);
+            }
         }
 
-        // 7. Draw Toast Notification
-        if self.copied_toast_timer > 0.0 && !self.copied_toast_msg.is_empty() {
-            theme::paint_toast(&painter, screen_rect, &self.copied_toast_msg);
-        }
-
-        // 8. Render Floating Intelligence Hero Panel
+        // 6. Render Floating Intelligence Hero Panel
         let render_ctx = CardRenderContext {
             query: &mut self.query,
             follow_up_query: &mut self.follow_up_query,
             is_loading: self.is_loading,
-            is_lens_active: &mut self.is_lens_active,
-            is_fullscreen_mode: &mut self.is_fullscreen_mode,
+            is_interact_mode: self.is_interact_mode,
             ai_response: &self.ai_response,
             error_msg: &self.error_msg,
             selection_rect: &mut self.selection_rect,
@@ -385,6 +466,12 @@ impl eframe::App for CircleSearchApp {
                     self.ai_response = None;
                     self.error_msg = None;
                     self.is_lens_active = true;
+                }
+                CardAction::Recapture => {
+                    self.trigger_recapture(ctx);
+                }
+                CardAction::ToggleMoveScreen => {
+                    self.toggle_interact_mode(ctx);
                 }
                 CardAction::Close => {
                     self.hide_overlay(ctx);
